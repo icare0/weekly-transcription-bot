@@ -45,7 +45,7 @@ async def start_meeting_(
         await channel.connect()
         print(f"🎙️ Bot joined vc: {channel.name}")
     else:
-        return await ctx.respond("⚠️ You need to be in a voice channel to start recording")
+        return await ctx.respond("⚠️ You need to be in a voice channel to start recording the meeting")
 
     meeting_path = os.path.join(MEETINGS_PATH, meeting_name)
     os.makedirs(meeting_path, exist_ok=True)
@@ -64,9 +64,9 @@ async def start_meeting_(
             finished_callback,
             (ctx, meeting_path, meeting_name)
         )
-        await ctx.respond(f"🔴 Started recording meeting `{meeting_name}` on voice channel `{channel.name}`")
+        await ctx.respond(f"🔴 Started recording the meeting `{meeting_name}` in a voice channel `{channel.name}`")
     else:
-        await ctx.respond("⚠️ Bot is not in a voice channel!")
+        await ctx.respond("⚠️ Bot is not in a voice channel")
 
 async def finished_callback(sink: discord.sinks.MP3Sink, context: tuple):
     _, meeting_path, meeting_name = context
@@ -111,7 +111,7 @@ async def stop_recording_(ctx: discord.ApplicationContext):
     vc: discord.VoiceClient = ctx.voice_client
 
     if not vc:
-        return await ctx.respond("⚠️ Bot is not recording")
+        return await ctx.respond("⚠️ Bot is not recording any meeting right now")
 
     vc.stop_recording()
     await vc.disconnect()
@@ -137,7 +137,7 @@ async def stop_recording_(ctx: discord.ApplicationContext):
     
     MEETINGS[-1]['summarized'] = True
     
-    await message.edit(content="✅ Transcription and summary saved")
+    await message.edit(content="✅ Transcription and summary done")
     
     with open(md_output_path, "r", encoding="utf-8") as file:
         blocks = utils.split_summary(file.read())

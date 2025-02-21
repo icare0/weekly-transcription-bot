@@ -40,7 +40,7 @@ This project is a Discord bot designed to record, transcribe, and summarize meet
     pip install -r requirements.txt
     ```
 
-4. Create a [`.env`](.env ) file in the root directory and add your credentials:
+4. Create a [.env](http://_vscodecontentref_/1) file in the root directory and add your credentials:
 
     ```env
     DISCORD_APP_TOKEN=<your-discord-bot-token>
@@ -58,73 +58,38 @@ python src/bot.py
 
 ## Commands
 
-### `/start_recording`
+### `/start_meeting`
 
 Starts recording audio from the voice channel.
 
-- **name**: The name of the meeting (required)
+- **meeting_name**: The name of the meeting (required)
 
-### `/stop_recording`
+### `/stop_meeting`
 
-Stops recording audio from the voice channel.
+Stops recording audio from the voice channel, transcribes, and summarizes the meeting.
 
 ### `/saved_meetings`
 
 Displays saved meetings data.
 
-### `/transcribe`
-
-Transcribes the saved recording.
-
-- **name**: The name of the meeting (required)
-
-### `/summarize`
-
-Summarizes the saved transcription of the meeting.
-
-- **name**: The name of the meeting (required)
-
-### `/send_recording`
-
-Sends the saved recording.
-
-- **name**: The name of the meeting (required)
-
-### `/send_transcription`
-
-Sends the saved transcription.
-
-- **name**: The name of the meeting (required)
-
 ### `/send_summary`
 
 Sends the saved summary.
 
-- **name**: The name of the meeting (required)
+- **meeting_name**: The name of the meeting (required)
+- **output_type**: The type of output (File or Text)
 
 ### `/delete_recording`
 
 Deletes the saved recording.
 
-- **name**: The name of the meeting (required)
-
-### `/delete_transcription`
-
-Deletes the saved transcription.
-
-- **name**: The name of the meeting (required)
-
-### `/delete_summary`
-
-Deletes the saved summary.
-
-- **name**: The name of the meeting (required)
+- **meeting_name**: The name of the meeting (required)
 
 ### `/delete_meeting`
 
 Deletes the saved meeting.
 
-- **name**: The name of the meeting (required)
+- **meeting_name**: The name of the meeting (required)
 
 ---
 
