@@ -134,3 +134,14 @@ def save_summary(summary: str, output_path: str):
 
     print(f"✅ Summary saved: {output_path}")
     
+def split_summary(summary: str) -> List[str]:
+    blocks = []
+    block = ""
+    for line in summary.split("\n"):
+        if len(block) + len(line) > 2000:
+            blocks.append(block)
+            block = ""
+        block += line + "\n"
+    if block:
+        blocks.append(block)
+    return blocks

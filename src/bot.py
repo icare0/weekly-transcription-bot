@@ -29,12 +29,14 @@ async def on_ready():
     print(f"📂 Registered meetings: {[meeting['name'] for meeting in MEETINGS]}")
     
 @bot.slash_command(
-    name="start_recording",
+    name="start_meeting",
     description="Starts recording audio from the voice channel.",
     guild_ids=[GUILD_ID]
 )
-@discord.option("name", str, description="The name of the meeting", required=True)
-async def start_recording_(ctx: discord.ApplicationContext, meeting_name: str):
+async def start_meeting_(
+    ctx: discord.ApplicationContext,
+    meeting_name: str = discord.Option(input_type=str, name="meeting_name", description="The name of the meeting", required=True)
+):
     if meeting_name in [meeting['name'] for meeting in MEETINGS if meeting['recorded'] or meeting['transcribed'] or meeting['summarized']]:
         return await ctx.respond(f"❌ Meeting `{meeting_name}` already exists")
     
@@ -47,6 +49,13 @@ async def start_recording_(ctx: discord.ApplicationContext, meeting_name: str):
 
     meeting_path = os.path.join(MEETINGS_PATH, meeting_name)
     os.makedirs(meeting_path, exist_ok=True)
+    
+    MEETINGS.append({
+        'name': meeting_name,
+        'recorded': False,
+        'transcribed': False,
+        'summarized': False
+    })
 
     if ctx.voice_client:
         sink = discord.sinks.MP3Sink()
@@ -87,21 +96,18 @@ async def finished_callback(sink: discord.sinks.MP3Sink, context: tuple):
     output_path = os.path.join(meeting_path, f"{meeting_name}.wav")
     longest.export(output_path, format="wav")
     
-    MEETINGS.append({
-        'name': meeting_name,
-        'recorded': True,
-        'transcribed': False,
-        'summarized': False
-    })
+    MEETINGS[-1]['recorded'] = True
     
-    print(f"✅ Recording saved: {output_path}")
+    print(f"✅ Recording saved: {output_path}") 
 
 @bot.slash_command(
-    name="stop_recording",
-    description="Stops recording audio from the voice channel",
+    name="stop_meeting",
+    description="Stops current recording, transcribes and summarizes the meeting",
     guild_ids=[GUILD_ID]
 )
 async def stop_recording_(ctx: discord.ApplicationContext):
+    ctx.defer()
+    
     vc: discord.VoiceClient = ctx.voice_client
 
     if not vc:
@@ -109,11 +115,38 @@ async def stop_recording_(ctx: discord.ApplicationContext):
 
     vc.stop_recording()
     await vc.disconnect()
-    await ctx.respond("🛑 Recording stopped")
+    message = await ctx.respond("🛑 Recording stopped")
+    
+    meeting_name = MEETINGS[-1]['name']
+    meeting_path = os.path.join(MEETINGS_PATH, meeting_name)
+    audio_path = os.path.join(meeting_path, f"{meeting_name}.wav")
+    
+    await message.edit(content="🔄 Transcribing...")
+    
+    transcription = utils.transcribe(audio_path, OPENAI_API_KEY, split_size=24)
+    txt_output_path = os.path.join(meeting_path, f"{meeting_name}.txt")
+    utils.save_transcription(transcription, txt_output_path)
+    
+    MEETINGS[-1]['transcribed'] = True
+    
+    await message.edit(content="🔄 Summarizing...")
+    
+    summary = utils.summarize_transcription(txt_output_path, OPENAI_API_KEY)
+    md_output_path = os.path.join(meeting_path, f"{meeting_name}.md")
+    utils.save_summary(summary, md_output_path)
+    
+    MEETINGS[-1]['summarized'] = True
+    
+    await message.edit(content="✅ Transcription and summary saved")
+    
+    with open(md_output_path, "r", encoding="utf-8") as file:
+        blocks = utils.split_summary(file.read())
+        for block in blocks:
+            await ctx.send(block)
     
 @bot.slash_command(
     name="saved_meetings",
-    description="Display saved meetings data",
+    description="Prints list of saved meetings",
     guild_ids=[GUILD_ID]
 )
 async def saved_meetings_(ctx: discord.ApplicationContext):
@@ -130,143 +163,25 @@ async def saved_meetings_(ctx: discord.ApplicationContext):
     
     await ctx.respond(f"📂 Saved meetings:\n```{meetings_info}```")
     
-        
-@bot.slash_command(
-    name="transcribe",
-    description="Transcribe saved recording",
-    guild_ids=[GUILD_ID]
-)
-@discord.option("name", str, description="The name of the meeting", required=True)
-async def transcribe_(ctx: discord.ApplicationContext, meeting_name: str):
-    await ctx.defer()
-    
-    meeting = next((m for m in MEETINGS if m['name'] == meeting_name), None)
-
-    if not meeting:
-        return await ctx.respond(f"❌ Meeting `{meeting_name}` not found")
-
-    if not meeting['recorded']:
-        return await ctx.respond(f"❌ Meeting `{meeting_name}` has not been recorded")
-    
-    if meeting['transcribed']:
-        return await ctx.respond(f"✅ Meeting `{meeting_name}` has already been transcribed")
-
-    meeting_path = os.path.join(MEETINGS_PATH, meeting_name)
-    audio_path = os.path.join(meeting_path, f"{meeting_name}.wav")
-
-    if not os.path.exists(audio_path):
-        return await ctx.respond(f"❌ No recording for meeting `{meeting_name}`")
-
-    message = await ctx.respond("🔄 Transcribing...")
-    
-    transcription = utils.transcribe(audio_path, OPENAI_API_KEY, split_size=24)
-    txt_output_path = os.path.join(meeting_path, f"{meeting_name}.txt")
-    utils.save_transcription(transcription, txt_output_path)
-    
-    for m in MEETINGS:
-        if m['name'] == meeting_name:
-            m['transcribed'] = True
-    
-    await message.edit(content=f"✅ Transcription saved")
-    
-@bot.slash_command(
-    name="summarize",
-    description="Summarize saved transcription of the meeting",
-    guild_ids=[GUILD_ID]
-)
-@discord.option("name", str, description="The name of the meeting", required=True)
-async def summarize_(ctx: discord.ApplicationContext, meeting_name: str):
-    await ctx.defer()
-    
-    meeting = next((m for m in MEETINGS if m['name'] == meeting_name), None)
-
-    if not meeting:
-        return await ctx.respond(f"❌ Meeting `{meeting_name}` not found")
-    
-    if not meeting['transcribed']:
-        return await ctx.respond(f"❌ Meeting `{meeting_name}` has not been transcribed")
-    
-    if meeting['summarized']:
-        return await ctx.respond(f"✅ Meeting `{meeting_name}` has already been summarized")
-    
-    meeting_path = os.path.join(MEETINGS_PATH, meeting_name)
-    txt_path = os.path.join(meeting_path, f"{meeting_name}.txt")
-    
-    if not os.path.exists(txt_path):
-        return await ctx.respond(f"❌ No transcription for meeting `{meeting_name}`")
-    
-    message = await ctx.respond("🔄 Summarizing...")
-    
-    summary = utils.summarize_transcription(txt_path, OPENAI_API_KEY)
-    md_output_path = os.path.join(meeting_path, f"{meeting_name}.md")
-    utils.save_summary(summary, md_output_path)
-        
-    for m in MEETINGS:
-        if m['name'] == meeting_name:
-            m['summarized'] = True
-    
-    await message.edit(content=f"✅ Summary saved")
-    
-@bot.slash_command(
-    name="send_recording",
-    description="Send saved recording",
-    guild_ids=[GUILD_ID]
-)
-@discord.option("name", str, description="The name of the meeting", required=True)
-async def send_recording_(ctx: discord.ApplicationContext, meeting_name: str):
-    ctx.defer()
-    
-    meeting = next((m for m in MEETINGS if m['name'] == meeting_name), None)
-
-    if not meeting:
-        return await ctx.respond(f"❌ Meeting `{meeting_name}` not found")
-
-    if not meeting['recorded']:
-        return await ctx.respond(f"❌ Meeting `{meeting_name}` has not been recorded")
-    
-    meeting_path = os.path.join(MEETINGS_PATH, meeting_name)
-    audio_path = os.path.join(meeting_path, f"{meeting_name}.wav")
-
-    if not os.path.exists(audio_path):
-        return await ctx.respond(f"❌ No recording for meeting `{meeting_name}`")
-
-    message = await ctx.respond("🔄 Sending recording...")
-    await message.edit_original_response(content="", file=discord.File(audio_path))
-    
-@bot.slash_command(
-    name="send_transcription",
-    description="Send saved transcription",
-    guild_ids=[GUILD_ID]
-)
-@discord.option("name", str, description="The name of the meeting", required=True)
-async def send_transcription_(ctx: discord.ApplicationContext, meeting_name: str):
-    ctx.defer()
-    
-    meeting = next((m for m in MEETINGS if m['name'] == meeting_name), None)
-
-    if not meeting:
-        return await ctx.respond(f"❌ Meeting `{meeting_name}` not found")
-    
-    if not meeting['transcribed']:
-        return await ctx.respond(f"❌ Meeting `{meeting_name}` has not been transcribed")
-    
-    meeting_path = os.path.join(MEETINGS_PATH, meeting_name)
-    txt_path = os.path.join(meeting_path, f"{meeting_name}.txt")
-    
-    if not os.path.exists(txt_path):
-        return await ctx.respond(f"❌ No transcription for meeting `{meeting_name}`")
-    
-    message = await ctx.respond("🔄 Sending transcription...")
-    await message.edit_original_response(content="", file=discord.File(txt_path))
-    
 @bot.slash_command(
     name="send_summary",
-    description="Send saved summary",
+    description="Sends summary of the meeting",
     guild_ids=[GUILD_ID]
 )
-@discord.option("name", str, description="The name of the meeting", required=True)
-async def send_summary_(ctx: discord.ApplicationContext, meeting_name: str):
-    ctx.defer()
+async def send_summary_(
+    ctx: discord.ApplicationContext,
+    meeting_name: str = discord.Option(input_type=str,
+                                       name="meeting_name",
+                                       description="The name of the meeting",
+                                       required=True,
+                                       choices=[m['name'] for m in MEETINGS]),
+    type_: str = discord.Option(input_type=str,
+                                name="output_type",
+                                description="Type of output",
+                                required=True,
+                                choices=["File", "Text"],)
+):
+    await ctx.defer()
     
     meeting = next((m for m in MEETINGS if m['name'] == meeting_name), None)
 
@@ -283,15 +198,27 @@ async def send_summary_(ctx: discord.ApplicationContext, meeting_name: str):
         return await ctx.respond(f"❌ No summary for meeting `{meeting_name}`")
     
     message = await ctx.respond("🔄 Sending summary...")
-    await message.edit_original_response(content="", file=discord.File(md_path))
+    if type_ == "File":
+        return await message.edit(content="", file=discord.File(md_path))
     
+    with open(md_path, "r", encoding="utf-8") as file:
+        blocks = utils.split_summary(file.read())
+        for block in blocks:
+            await ctx.send(block)
+
 @bot.slash_command(
     name="delete_recording",
-    description="Delete saved recording",
+    description="Deletes recording of the meeting",
     guild_ids=[GUILD_ID]
 )
-@discord.option("name", str, description="The name of the meeting", required=True)
-async def delete_recording_(ctx: discord.ApplicationContext, meeting_name: str):
+async def delete_recording_(
+    ctx: discord.ApplicationContext,
+    meeting_name: str = discord.Option(input_type=str,
+                                       name="meeting_name",
+                                       description="The name of the meeting",
+                                       required=True,
+                                       choices=[m['name'] for m in MEETINGS]),
+):
     meeting = next((m for m in MEETINGS if m['name'] == meeting_name), None)
 
     if not meeting:
@@ -308,56 +235,18 @@ async def delete_recording_(ctx: discord.ApplicationContext, meeting_name: str):
         return await ctx.respond(f"❌ No recording for meeting `{meeting_name}`")
 
 @bot.slash_command(
-    name="delete_transcription",
-    description="Delete saved transcription",
-    guild_ids=[GUILD_ID]
-)
-@discord.option("name", str, description="The name of the meeting", required=True)
-async def delete_transcription_(ctx: discord.ApplicationContext, meeting_name: str):
-    meeting = next((m for m in MEETINGS if m['name'] == meeting_name), None)
-
-    if not meeting:
-        return await ctx.respond(f"❌ Meeting `{meeting_name}` not found")
-
-    meeting_path = os.path.join(MEETINGS_PATH, meeting_name)
-    txt_path = os.path.join(meeting_path, f"{meeting_name}.txt")
-
-    if os.path.exists(txt_path):
-        os.remove(txt_path)
-        meeting['transcribed'] = False
-        return await ctx.respond(f"✅ Transcription `{meeting_name}` deleted")
-    else:
-        return await ctx.respond(f"❌ No transcription for meeting `{meeting_name}`")
-
-@bot.slash_command(
-    name="delete_summary",
-    description="Delete saved summary",
-    guild_ids=[GUILD_ID]
-)
-@discord.option("name", str, description="The name of the meeting", required=True)
-async def delete_summary_(ctx: discord.ApplicationContext, meeting_name: str):
-    meeting = next((m for m in MEETINGS if m['name'] == meeting_name), None)
-
-    if not meeting:
-        return await ctx.respond(f"❌ Meeting `{meeting_name}` not found")
-
-    meeting_path = os.path.join(MEETINGS_PATH, meeting_name)
-    md_path = os.path.join(meeting_path, f"{meeting_name}.md")
-
-    if os.path.exists(md_path):
-        os.remove(md_path)
-        meeting['summarized'] = False
-        return await ctx.respond(f"✅ Summary `{meeting_name}` deleted")
-    else:
-        return await ctx.respond(f"❌ No summary for meeting `{meeting_name}`")
-    
-@bot.slash_command(
     name="delete_meeting",
-    description="Delete saved meeting",
+    description="Deletes whole meeting",
     guild_ids=[GUILD_ID]
 )
-@discord.option("name", str, description="The name of the meeting", required=True)
-async def delete_meeting_(ctx: discord.ApplicationContext, meeting_name: str):
+async def delete_meeting_(
+    ctx: discord.ApplicationContext,
+    meeting_name: str = discord.Option(input_type=str,
+                                       name="meeting_name",
+                                       description="The name of the meeting",
+                                       required=True,
+                                       choices=[m['name'] for m in MEETINGS]),
+):
     meeting = next((m for m in MEETINGS if m['name'] == meeting_name), None)
 
     if not meeting:
@@ -384,6 +273,5 @@ async def delete_meeting_(ctx: discord.ApplicationContext, meeting_name: str):
     MEETINGS.remove(meeting)
     
     return await ctx.respond(f"✅ Meeting `{meeting_name}` deleted")
-
 
 bot.run(TOKEN)
