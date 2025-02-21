@@ -1,4 +1,5 @@
 import discord
+from discord.ext import commands
 import os
 import pydub
 import utils
@@ -19,6 +20,7 @@ MEETINGS_PATH = os.path.join(ROOT_DIR, "meetings")
 os.makedirs(MEETINGS_PATH, exist_ok=True)
 
 MEETINGS = utils.meetings_info(MEETINGS_PATH)
+ALLOWED_ROLES = ['Admin', 'Przewodniczący sekcji', 'Weekly Transcription Bot Operator']
 
 @bot.event
 async def on_ready():
@@ -36,6 +38,7 @@ async def on_ready():
     description="Starts recording audio from the voice channel.",
     guild_ids=[GUILD_ID]
 )
+@commands.has_any_role(*ALLOWED_ROLES)
 async def start_meeting_(
     ctx: discord.ApplicationContext,
     meeting_name: str = discord.Option(input_type=str, name="meeting_name", description="The name of the meeting", required=True)
@@ -71,7 +74,7 @@ async def start_meeting_(
         await ctx.respond(f"🔴 Started recording the meeting `{meeting_name}` in a voice channel `{channel.name}`")
         
         activity = discord.Game(name="👂🏼 Capturing every word")
-        await bot.change_presence(status=discord.Status.online, activity=activity)
+        await bot.change_presence(status=discord.Status.dnd, activity=activity)
     else:
         await ctx.respond("⚠️ Bot is not in a voice channel")
 
@@ -112,6 +115,7 @@ async def finished_callback(sink: discord.sinks.MP3Sink, context: tuple):
     description="Stops current recording, transcribes and summarizes the meeting",
     guild_ids=[GUILD_ID]
 )
+@commands.has_any_role(*ALLOWED_ROLES)
 async def stop_recording_(ctx: discord.ApplicationContext):
     ctx.defer()
     
@@ -164,6 +168,7 @@ async def stop_recording_(ctx: discord.ApplicationContext):
     description="Prints list of saved meetings",
     guild_ids=[GUILD_ID]
 )
+@commands.has_any_role(*ALLOWED_ROLES)
 async def saved_meetings_(ctx: discord.ApplicationContext):
     if not MEETINGS:
         return await ctx.respond("❌ No meetings saved")
@@ -177,12 +182,13 @@ async def saved_meetings_(ctx: discord.ApplicationContext):
     ])
     
     await ctx.respond(f"📂 Saved meetings:\n```{meetings_info}```")
-    
+
 @bot.slash_command(
     name="send_summary",
     description="Sends summary of the meeting",
     guild_ids=[GUILD_ID]
 )
+@commands.has_any_role(*ALLOWED_ROLES)
 async def send_summary_(
     ctx: discord.ApplicationContext,
     meeting_name: str = discord.Option(input_type=str,
@@ -227,6 +233,7 @@ async def send_summary_(
     description="Deletes recording of the meeting",
     guild_ids=[GUILD_ID]
 )
+@commands.has_any_role(*ALLOWED_ROLES)
 async def delete_recording_(
     ctx: discord.ApplicationContext,
     meeting_name: str = discord.Option(input_type=str,
@@ -255,6 +262,7 @@ async def delete_recording_(
     description="Deletes whole meeting",
     guild_ids=[GUILD_ID]
 )
+@commands.has_any_role(*ALLOWED_ROLES)
 async def delete_meeting_(
     ctx: discord.ApplicationContext,
     meeting_name: str = discord.Option(input_type=str,
@@ -289,5 +297,17 @@ async def delete_meeting_(
     MEETINGS.remove(meeting)
     
     return await ctx.respond(f"✅ Meeting `{meeting_name}` deleted")
+
+@start_meeting_.error
+@stop_recording_.error
+@saved_meetings_.error
+@send_summary_.error
+@delete_recording_.error
+@delete_meeting_.error
+async def restricted_error(ctx, error):
+    if isinstance(error, commands.MissingRole | commands.MissingAnyRole):
+        await ctx.send("⛔ No permission to use this command")
+    else:
+        await ctx.send(f"❌ [ERROR]:\n```\n{str(error)}```")
 
 bot.run(TOKEN)
