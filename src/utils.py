@@ -107,10 +107,12 @@ def summarize_transcription(transcription_path: str, openai_api_key: str):
         "- ⏭️ **Plany na przyszłość** – co zaplanowano na kolejne spotkania lub działania?\n"
         "- 🔹 **Dodatkowe istotne informacje** – np. problemy, wyzwania, sugestie.\n\n"
         "Podsumowanie powinno być dobrze zorganizowane, logicznie uporządkowane i zawierać wszystkie istotne szczegóły. "
-        "Podsumowanie powinno byc w formacie .md (Markdown)"
+        "Podsumowanie powinno byc w formacie .md (Markdown). "
         "Nie pomijaj ważnych informacji, ale staraj się unikać nadmiernych szczegółów i powtórzeń. "
-        "Zachowaj profesjonalny i przejrzysty styl."
-        "Nie halucynuj, nie przeklinaj, nie używaj wulgaryzmów."
+        "Zachowaj profesjonalny i przejrzysty styl. "
+        "Nie halucynuj, nie przeklinaj, nie używaj wulgaryzmów. "
+        "Na spotkaniach omawiane będa osiągnięcia z poprzedniego tygodnia zespołów: "
+        "ToPWR, Planer, Cube3D/Led Cube, Aplikacja i strona Juwenalia, Strona katedry W4, Eventownik, Promochator. "
     )
     
     print(f"🔄 Summarizing transcription")
