@@ -28,6 +28,9 @@ async def on_ready():
     print(f"📜 Registered commands: {[cmd.name for cmd in bot.application_commands]}")
     print(f"📂 Registered meetings: {[meeting['name'] for meeting in MEETINGS]}")
     
+    activity = discord.Game(name="🗿 Pretends to listen")
+    await bot.change_presence(status=discord.Status.online, activity=activity)
+    
 @bot.slash_command(
     name="start_meeting",
     description="Starts recording audio from the voice channel.",
@@ -66,6 +69,9 @@ async def start_meeting_(
             (ctx, meeting_path, meeting_name)
         )
         await ctx.respond(f"🔴 Started recording the meeting `{meeting_name}` in a voice channel `{channel.name}`")
+        
+        activity = discord.Game(name="👂🏼 Capturing every word")
+        await bot.change_presence(status=discord.Status.online, activity=activity)
     else:
         await ctx.respond("⚠️ Bot is not in a voice channel")
 
@@ -117,6 +123,9 @@ async def stop_recording_(ctx: discord.ApplicationContext):
     vc.stop_recording()
     await vc.disconnect()
     message = await ctx.respond("🛑 Recording stopped")
+    
+    activity = discord.Game(name="🗿 Pretends to listen")
+    await bot.change_presence(status=discord.Status.online, activity=activity)
     
     meeting_name = MEETINGS[-1]['name']
     meeting_path = os.path.join(MEETINGS_PATH, meeting_name)
