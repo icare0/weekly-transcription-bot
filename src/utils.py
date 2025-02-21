@@ -97,7 +97,7 @@ def save_transcription(transcription: str, output_path: str):
 def summarize_transcription(transcription_path: str, openai_api_key: str):
     client = OpenAI(api_key=openai_api_key)
     
-    system_content = (
+    prompt = (
         "Jesteś profesjonalnym asystentem, który dokładnie podsumowuje transkrypcję cotygodniowego spotkania Solvro Weekly koła naukowego Solvro. "
         "Twoim celem jest stworzenie szczegółowego, ale czytelnego podsumowania, które zawiera wszystkie kluczowe informacje. "
         "Podsumowanie powinno zawierać:\n"
@@ -107,20 +107,20 @@ def summarize_transcription(transcription_path: str, openai_api_key: str):
         "- ⏭️ **Plany na przyszłość** – co zaplanowano na kolejne spotkania lub działania?\n"
         "- 🔹 **Dodatkowe istotne informacje** – np. problemy, wyzwania, sugestie.\n\n"
         "Podsumowanie powinno być dobrze zorganizowane, logicznie uporządkowane i zawierać wszystkie istotne szczegóły. "
-        "Podsumowanie powinno byc w formacie .md (Markdown). "
+        "Podsumowanie powinno byc w formacie .md (Markdown) dostosowanym do możliwości Discord. "
         "Nie pomijaj ważnych informacji, ale staraj się unikać nadmiernych szczegółów i powtórzeń. "
         "Zachowaj profesjonalny i przejrzysty styl. "
         "Nie halucynuj, nie przeklinaj, nie używaj wulgaryzmów. "
         "Na spotkaniach omawiane będa osiągnięcia z poprzedniego tygodnia zespołów: "
-        "ToPWR, Planer, Cube3D/Led Cube, Aplikacja i strona Juwenalia, Strona katedry W4, Eventownik, Promochator. "
+        "Aplikacja ToPWR, Planer, Cube3D/Led Cube, Aplikacja i strona Juwenalia, Strona katedry W4, Eventownik, Promochator. "
     )
     
     print(f"🔄 Summarizing transcription")
     with open(transcription_path, "r", encoding="utf-8") as txt_file:
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o", # byl gpt-3.5-turbo
             messages=[
-                {"role": "system", "content": system_content},
+                {"role": "system", "content": prompt},
                 {"role": "user", "content": f"Podsumuj tę transkrypcję:\n{txt_file.read()}"}
             ]
         )
@@ -133,3 +133,4 @@ def save_summary(summary: str, output_path: str):
         md_file.write(summary)
 
     print(f"✅ Summary saved: {output_path}")
+    
