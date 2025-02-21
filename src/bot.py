@@ -93,8 +93,8 @@ async def finished_callback(sink: discord.sinks.MP3Sink, context: tuple):
     for seg in audio_segs:
         longest = longest.overlay(seg)
     
-    output_path = os.path.join(meeting_path, f"{meeting_name}.wav")
-    longest.export(output_path, format="wav")
+    output_path = os.path.join(meeting_path, f"{meeting_name}.mp3")
+    longest.export(output_path, format="mp3")
     
     MEETINGS[-1]['recorded'] = True
     
@@ -119,7 +119,7 @@ async def stop_recording_(ctx: discord.ApplicationContext):
     
     meeting_name = MEETINGS[-1]['name']
     meeting_path = os.path.join(MEETINGS_PATH, meeting_name)
-    audio_path = os.path.join(meeting_path, f"{meeting_name}.wav")
+    audio_path = os.path.join(meeting_path, f"{meeting_name}.mp3")
     
     await message.edit(content="🔄 Transcribing...")
     
@@ -225,7 +225,7 @@ async def delete_recording_(
         return await ctx.respond(f"❌ Meeting `{meeting_name}` not found")
 
     meeting_path = os.path.join(MEETINGS_PATH, meeting_name)
-    audio_path = os.path.join(meeting_path, f"{meeting_name}.wav")
+    audio_path = os.path.join(meeting_path, f"{meeting_name}.mp3")
 
     if os.path.exists(audio_path):
         os.remove(audio_path)
@@ -253,7 +253,7 @@ async def delete_meeting_(
         return await ctx.respond(f"❌ Meeting `{meeting_name}` not found")
 
     meeting_path = os.path.join(MEETINGS_PATH, meeting_name)
-    audio_path = os.path.join(meeting_path, f"{meeting_name}.wav")
+    audio_path = os.path.join(meeting_path, f"{meeting_name}.mp3")
     txt_path = os.path.join(meeting_path, f"{meeting_name}.txt")
     md_path = os.path.join(meeting_path, f"{meeting_name}.md")
 

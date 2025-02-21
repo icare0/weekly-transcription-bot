@@ -10,13 +10,13 @@ def meetings_info(meetings_dir: str) -> List[Dict]:
         folder_path = os.path.join(meetings_dir, meeting_folder)
         
         if os.path.isdir(folder_path):
-            contains_wav = False
+            contains_mp3 = False
             contains_md = False
             contains_txt = False
 
             for file_name in os.listdir(folder_path):
-                if file_name.endswith('.wav'):
-                    contains_wav = True
+                if file_name.endswith('.mp3'):
+                    contains_mp3 = True
                 elif file_name.endswith('.md'):
                     contains_md = True
                 elif file_name.endswith('.txt'):
@@ -24,7 +24,7 @@ def meetings_info(meetings_dir: str) -> List[Dict]:
                     
             meetings_info.append({
                 'name': meeting_folder,
-                'recorded': contains_wav,
+                'recorded': contains_mp3,
                 'transcribed': contains_txt,
                 'summarized': contains_md
             })
@@ -32,7 +32,7 @@ def meetings_info(meetings_dir: str) -> List[Dict]:
     return meetings_info
 
 def split_audio(file_path: str, max_size_mb=25) -> List[str]:
-    audio = AudioSegment.from_wav(file_path)
+    audio = AudioSegment.from_mp3(file_path)
     file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
     
     if file_size_mb < max_size_mb:
@@ -47,8 +47,8 @@ def split_audio(file_path: str, max_size_mb=25) -> List[str]:
         end_ms = start_ms + chunk_length_ms
         chunk = audio[start_ms:end_ms]
         
-        chunk_path = f"{file_path}_chunk_{i+1}.wav"
-        chunk.export(chunk_path, format="wav")
+        chunk_path = f"{file_path}_chunk_{i+1}.mp3"
+        chunk.export(chunk_path, format="mp3")
         chunk_paths.append(chunk_path)
     
     return chunk_paths
