@@ -43,6 +43,7 @@ async def start_meeting_(
     if ctx.author.voice:
         channel = ctx.author.voice.channel
         await channel.connect()
+        await ctx.guild.me.edit(mute=True)
         print(f"🎙️ Bot joined vc: {channel.name}")
     else:
         return await ctx.respond("⚠️ You need to be in a voice channel to start recording the meeting")
@@ -120,6 +121,11 @@ async def stop_recording_(ctx: discord.ApplicationContext):
     meeting_name = MEETINGS[-1]['name']
     meeting_path = os.path.join(MEETINGS_PATH, meeting_name)
     audio_path = os.path.join(meeting_path, f"{meeting_name}.mp3")
+    
+    if not os.path.exists(audio_path):
+        MEETINGS.pop()
+        os.rmdir(meeting_path)
+        return await message.edit(content="❌ No recording found or recording was empty")
     
     await message.edit(content="🔄 Transcribing...")
     
@@ -203,6 +209,7 @@ async def send_summary_(
     
     with open(md_path, "r", encoding="utf-8") as file:
         blocks = utils.split_summary(file.read())
+        await message.edit(content="✅ Summary ready")
         for block in blocks:
             await ctx.send(block)
 
