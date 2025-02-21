@@ -184,6 +184,39 @@ async def saved_meetings_(ctx: discord.ApplicationContext):
     await ctx.respond(f"📂 Saved meetings:\n```{meetings_info}```")
 
 @bot.slash_command(
+    name="send_transcription",
+    description="Sends transcription of the meeting",
+    guild_ids=[GUILD_ID]
+)
+@commands.has_any_role(*ALLOWED_ROLES)
+async def send_transcription_(
+    ctx: discord.ApplicationContext,
+    meeting_name: str = discord.Option(input_type=str,
+                                       name="meeting_name",
+                                       description="The name of the meeting",
+                                       required=True,
+                                       choices=[m['name'] for m in MEETINGS])
+):
+    await ctx.defer()
+    
+    meeting = next((m for m in MEETINGS if m['name'] == meeting_name), None)
+
+    if not meeting:
+        return await ctx.respond(f"❌ Meeting `{meeting_name}` not found")
+    
+    if not meeting['transcribed']:
+        return await ctx.respond(f"❌ Meeting `{meeting_name}` has not been transcribed")
+    
+    meeting_path = os.path.join(MEETINGS_PATH, meeting_name)
+    txt_path = os.path.join(meeting_path, f"{meeting_name}.txt")
+    
+    if not os.path.exists(txt_path):
+        return await ctx.respond(f"❌ No transcription for meeting `{meeting_name}`")
+    
+    message = await ctx.respond("🔄 Sending transcription...")
+    return await message.edit(content="", file=discord.File(txt_path))
+
+@bot.slash_command(
     name="send_summary",
     description="Sends summary of the meeting",
     guild_ids=[GUILD_ID]
@@ -301,6 +334,7 @@ async def delete_meeting_(
 @start_meeting_.error
 @stop_recording_.error
 @saved_meetings_.error
+@send_transcription_.error
 @send_summary_.error
 @delete_recording_.error
 @delete_meeting_.error

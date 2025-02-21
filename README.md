@@ -58,6 +58,8 @@ python src/bot.py
 
 ## Commands
 
+> <em>Allowed roles: Admin, Przewodniczący sekcji, Weekly Transcription Bot Operator</em>
+
 ### `/start_meeting`
 
 Starts recording audio from the voice channel.
@@ -71,6 +73,12 @@ Stops recording audio from the voice channel, transcribes, and summarizes the me
 ### `/saved_meetings`
 
 Displays saved meetings data.
+
+### `/send_transcription`
+
+Sends the saved transcription.
+
+- **meeting_name**: The name of the meeting (required)
 
 ### `/send_summary`
 
