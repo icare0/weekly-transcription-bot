@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+venv/
+meetings/
+*.env
+.vscode/
+.idea/
+*.swp
+*.cog.pyc
+*.pyd
+
+todo.txt
