@@ -22,7 +22,10 @@ os.makedirs(MEETINGS_PATH, exist_ok=True)
 MEETINGS = utils.meetings_info(MEETINGS_PATH)
 ALLOWED_ROLES = ['Admin', 'Przewodniczący sekcji', 'Weekly Transcription Bot Operator']
 
-@bot.event
+async def meetings_autocomplete(ctx: discord.AutocompleteContext):
+    return [m['name'] for m in MEETINGS]
+
+@bot.listen(once=True)
 async def on_ready():
     print(f"✅ Bot online as {bot.user}")
     await bot.sync_commands(force=True)
@@ -41,7 +44,12 @@ async def on_ready():
 @commands.has_any_role(*ALLOWED_ROLES)
 async def start_meeting_(
     ctx: discord.ApplicationContext,
-    meeting_name: str = discord.Option(input_type=str, name="meeting_name", description="The name of the meeting", required=True)
+    meeting_name: str = discord.Option(
+        input_type=str,
+        name="meeting_name",
+        description="The name of the meeting",
+        required=True
+    )
 ):
     if meeting_name in [meeting['name'] for meeting in MEETINGS if meeting['recorded'] or meeting['transcribed'] or meeting['summarized']]:
         return await ctx.respond(f"❌ Meeting `{meeting_name}` already exists")
@@ -117,7 +125,7 @@ async def finished_callback(sink: discord.sinks.MP3Sink, context: tuple):
 )
 @commands.has_any_role(*ALLOWED_ROLES)
 async def stop_recording_(ctx: discord.ApplicationContext):
-    ctx.defer()
+    await ctx.defer()
     
     vc: discord.VoiceClient = ctx.voice_client
 
@@ -191,11 +199,13 @@ async def saved_meetings_(ctx: discord.ApplicationContext):
 @commands.has_any_role(*ALLOWED_ROLES)
 async def send_transcription_(
     ctx: discord.ApplicationContext,
-    meeting_name: str = discord.Option(input_type=str,
-                                       name="meeting_name",
-                                       description="The name of the meeting",
-                                       required=True,
-                                       choices=[m['name'] for m in MEETINGS])
+    meeting_name: str = discord.Option(
+        input_type=str,
+        name="meeting_name",
+        description="The name of the meeting",
+        required=True,
+        autocomplete=meetings_autocomplete
+    )
 ):
     await ctx.defer()
     
@@ -225,15 +235,18 @@ async def send_transcription_(
 async def send_summary_(
     ctx: discord.ApplicationContext,
     meeting_name: str = discord.Option(input_type=str,
-                                       name="meeting_name",
-                                       description="The name of the meeting",
-                                       required=True,
-                                       choices=[m['name'] for m in MEETINGS]),
-    type_: str = discord.Option(input_type=str,
-                                name="output_type",
-                                description="Type of output",
-                                required=True,
-                                choices=["File", "Text"],)
+        name="meeting_name",
+        description="The name of the meeting",
+        required=True,
+        autocomplete=meetings_autocomplete
+    ),
+    type_: str = discord.Option(
+        input_type=str,
+        name="output_type",
+        description="Type of output",
+        required=True,
+        choices=["File", "Text"],
+    )
 ):
     await ctx.defer()
     
@@ -269,11 +282,13 @@ async def send_summary_(
 @commands.has_any_role(*ALLOWED_ROLES)
 async def delete_recording_(
     ctx: discord.ApplicationContext,
-    meeting_name: str = discord.Option(input_type=str,
-                                       name="meeting_name",
-                                       description="The name of the meeting",
-                                       required=True,
-                                       choices=[m['name'] for m in MEETINGS]),
+    meeting_name: str = discord.Option(
+        input_type=str,
+        name="meeting_name",
+        description="The name of the meeting",
+        required=True,
+        autocomplete=meetings_autocomplete
+    ),
 ):
     meeting = next((m for m in MEETINGS if m['name'] == meeting_name), None)
 
@@ -298,11 +313,13 @@ async def delete_recording_(
 @commands.has_any_role(*ALLOWED_ROLES)
 async def delete_meeting_(
     ctx: discord.ApplicationContext,
-    meeting_name: str = discord.Option(input_type=str,
-                                       name="meeting_name",
-                                       description="The name of the meeting",
-                                       required=True,
-                                       choices=[m['name'] for m in MEETINGS]),
+    meeting_name: str = discord.Option(
+        input_type=str,
+        name="meeting_name",
+        description="The name of the meeting",
+        required=True,
+        autocomplete=meetings_autocomplete
+    )
 ):
     meeting = next((m for m in MEETINGS if m['name'] == meeting_name), None)
 
@@ -340,8 +357,6 @@ async def delete_meeting_(
 @delete_meeting_.error
 async def restricted_error(ctx, error):
     if isinstance(error, commands.MissingRole | commands.MissingAnyRole):
-        await ctx.send("⛔ No permission to use this command")
-    else:
-        await ctx.send(f"❌ [ERROR]:\n```\n{str(error)}```")
+        await ctx.send("⛔ No permissions to use this command")
 
 bot.run(TOKEN)
