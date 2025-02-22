@@ -3,24 +3,6 @@ from pydub import AudioSegment
 from openai import OpenAI
 import math, os
 
-PROMPT = (
-        "Jesteś profesjonalnym asystentem, który dokładnie podsumowuje transkrypcję cotygodniowego spotkania Solvro Weekly koła naukowego Solvro. "
-        "Twoim celem jest stworzenie szczegółowego, ale czytelnego podsumowania, które zawiera wszystkie kluczowe informacje. "
-        "Podsumowanie powinno zawierać:\n"
-        "- 📌 **Główne tematy spotkania** – co zostało omówione?\n"
-        "- ✅ **Podjęte decyzje** – jakie wnioski i decyzje zapadły?\n"
-        "- 📝 **Zadania do wykonania** – kto jest odpowiedzialny za konkretne działania?\n"
-        "- ⏭️ **Plany na przyszłość** – co zaplanowano na kolejne spotkania lub działania?\n"
-        "- 🔹 **Dodatkowe istotne informacje** – np. problemy, wyzwania, sugestie.\n\n"
-        "Podsumowanie powinno być dobrze zorganizowane, logicznie uporządkowane i zawierać wszystkie istotne szczegóły. "
-        "Podsumowanie powinno byc w formacie .md (Markdown) dostosowanym do możliwości Discord. "
-        "Nie pomijaj ważnych informacji, ale staraj się unikać nadmiernych szczegółów i powtórzeń. "
-        "Zachowaj profesjonalny i przejrzysty styl. "
-        "Nie halucynuj, nie przeklinaj, nie używaj wulgaryzmów. "
-        "Na spotkaniach omawiane będa osiągnięcia z poprzedniego tygodnia zespołów: "
-        "Aplikacja ToPWR, Planer, Cube3D/Led Cube, Aplikacja i strona Juwenalia, Strona katedry W4, Eventownik, Promochator. "
-    )
-
 def meetings_info(meetings_dir: str) -> List[Dict]:
     meetings_info = []
     
@@ -71,24 +53,24 @@ def split_audio(file_path: str, max_size_mb=25) -> List[str]:
     
     return chunk_paths
 
-def transcribe_audio(file_path: str, openai_client: OpenAI):   
+def transcribe_audio(file_path: str, openai_client: OpenAI, model_: str, lang_: str):   
     with open(file_path, "rb") as audio_file:
         response = openai_client.audio.transcriptions.create(
-            model="whisper-1",
+            model=model_,
             file=audio_file,
-            language="pl",
+            language=lang_,
         )
 
     return response
 
-def transcribe(file_path, openai_api_key: str, split_size=25):
+def transcribe(file_path, openai_api_key: str, model_: str, lang_: str, split_size=25):
     chunk_paths = split_audio(file_path, split_size)
     full_transcription = ""
     
     client = OpenAI(api_key=openai_api_key)
     
     for chunk_path in chunk_paths:
-        response = transcribe_audio(chunk_path, client)
+        response = transcribe_audio(chunk_path, client, model_, lang_)
         transcription_text = response.text
         full_transcription += transcription_text + " "
 
@@ -101,15 +83,17 @@ def save_transcription(transcription: str, output_path: str):
     with open(output_path, "w", encoding="utf-8") as txt_file:
         txt_file.write(transcription)
         
-def summarize_transcription(transcription_path: str, openai_api_key: str):
+def summarize_transcription(transcription_path: str, openai_api_key: str, model_: str, prompt_: List[str], user_msg: str):
     client = OpenAI(api_key=openai_api_key)
+    
+    prompt = "".join(prompt_)
     
     with open(transcription_path, "r", encoding="utf-8") as txt_file:
         response = client.chat.completions.create(
-            model="gpt-4o", # byl gpt-3.5-turbo
+            model=model_,
             messages=[
-                {"role": "system", "content": PROMPT},
-                {"role": "user", "content": f"Podsumuj tę transkrypcję:\n{txt_file.read()}"}
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": f"{user_msg}{txt_file.read()}"}
             ]
         )
 
@@ -122,11 +106,14 @@ def save_summary(summary: str, output_path: str):
 def split_summary(summary: str) -> List[str]:
     blocks = []
     block = ""
+    
     for line in summary.split("\n"):
         if len(block) + len(line) > 2000:
             blocks.append(block)
             block = ""
         block += line + "\n"
+        
     if block:
         blocks.append(block)
+        
     return blocks

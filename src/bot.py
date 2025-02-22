@@ -5,6 +5,7 @@ import pydub
 from pydub.utils import which
 import utils
 import dotenv
+import json
 
 pydub.AudioSegment.converter = which("ffmpeg")
 
@@ -22,11 +23,11 @@ ROOT_DIR = os.path.dirname(BASE_DIR)
 MEETINGS_PATH = os.path.join(ROOT_DIR, "meetings")
 os.makedirs(MEETINGS_PATH, exist_ok=True)
 
-MEETINGS = utils.meetings_info(MEETINGS_PATH)
+config_path = os.path.join(ROOT_DIR, "config.json")
+with open(config_path, "r", encoding="utf-8") as config_file:
+    CONFIG = json.load(config_file)
 
-ALLOWED_ROLES = ['Admin', 'Przewodniczący sekcji', 'Weekly Transcription Bot Operator']
-IDLING_MESSAGE = "🗿 Pretends to listen"
-RECORDING_MESSAGE = "👂🏼 Capturing every word"
+MEETINGS = utils.meetings_info(MEETINGS_PATH)
 
 async def meetings_autocomplete(ctx: discord.AutocompleteContext):
     return [m['name'] for m in MEETINGS]
@@ -35,7 +36,7 @@ async def meetings_autocomplete(ctx: discord.AutocompleteContext):
 async def on_ready():
     print(f"Bot online as {bot.user}")
     await bot.sync_commands(force=True)
-    activity = discord.Game(name=IDLING_MESSAGE)
+    activity = discord.Game(name=CONFIG['activity']['not_recording'])
     await bot.change_presence(status=discord.Status.online, activity=activity)
     
 @bot.slash_command(
@@ -43,7 +44,7 @@ async def on_ready():
     description="Starts recording audio from the voice channel.",
     guild_ids=[GUILD_ID]
 )
-@commands.has_any_role(*ALLOWED_ROLES)
+@commands.has_any_role(*CONFIG['allowed_roles'])
 async def start_meeting_(
     ctx: discord.ApplicationContext,
     meeting_name: str = discord.Option(
@@ -82,7 +83,7 @@ async def start_meeting_(
         )
         await ctx.respond(f"🔴 Started recording the meeting `{meeting_name}` in a voice channel `{channel.name}`")
         
-        activity = discord.Game(name=RECORDING_MESSAGE)
+        activity = discord.Game(name=CONFIG['activity']['recording'])
         await bot.change_presence(status=discord.Status.dnd, activity=activity)
     else:
         await ctx.respond("⚠️ Bot is not in a voice channel")
@@ -118,7 +119,7 @@ async def merge_recordings(sink: discord.sinks.MP3Sink, args: tuple):
     description="Stops current recording, transcribes and summarizes the meeting",
     guild_ids=[GUILD_ID]
 )
-@commands.has_any_role(*ALLOWED_ROLES)
+@commands.has_any_role(*CONFIG['allowed_roles'])
 async def stop_recording_(ctx: discord.ApplicationContext):
     await ctx.defer()
     
@@ -131,7 +132,7 @@ async def stop_recording_(ctx: discord.ApplicationContext):
     await vc.disconnect()
     message = await ctx.respond("🛑 Recording stopped")
     
-    activity = discord.Game(name=IDLING_MESSAGE)
+    activity = discord.Game(name=CONFIG['activity']['not_recording'])
     await bot.change_presence(status=discord.Status.online, activity=activity)
     
     meeting_name = MEETINGS[-1]['name']
@@ -145,7 +146,7 @@ async def stop_recording_(ctx: discord.ApplicationContext):
     
     await message.edit(content="🔄 Transcribing...")
     
-    transcription = utils.transcribe(audio_path, OPENAI_API_KEY, split_size=24)
+    transcription = utils.transcribe(audio_path, OPENAI_API_KEY, CONFIG['transcription_model'], CONFIG['transcription_language'], split_size=24)
     txt_output_path = os.path.join(meeting_path, f"{meeting_name}.txt")
     utils.save_transcription(transcription, txt_output_path)
     
@@ -153,7 +154,7 @@ async def stop_recording_(ctx: discord.ApplicationContext):
     
     await message.edit(content="🔄 Summarizing...")
     
-    summary = utils.summarize_transcription(txt_output_path, OPENAI_API_KEY)
+    summary = utils.summarize_transcription(txt_output_path, OPENAI_API_KEY, CONFIG['summary_model'], CONFIG['system_content'], CONFIG['user_content'])
     md_output_path = os.path.join(meeting_path, f"{meeting_name}.md")
     utils.save_summary(summary, md_output_path)
     
@@ -171,7 +172,7 @@ async def stop_recording_(ctx: discord.ApplicationContext):
     description="Prints list of saved meetings",
     guild_ids=[GUILD_ID]
 )
-@commands.has_any_role(*ALLOWED_ROLES)
+@commands.has_any_role(*CONFIG['allowed_roles'])
 async def saved_meetings_(ctx: discord.ApplicationContext):
     if not MEETINGS:
         return await ctx.respond("❌ No meetings saved")
@@ -191,7 +192,7 @@ async def saved_meetings_(ctx: discord.ApplicationContext):
     description="Sends transcription of the meeting",
     guild_ids=[GUILD_ID]
 )
-@commands.has_any_role(*ALLOWED_ROLES)
+@commands.has_any_role(*CONFIG['allowed_roles'])
 async def send_transcription_(
     ctx: discord.ApplicationContext,
     meeting_name: str = discord.Option(
@@ -226,7 +227,7 @@ async def send_transcription_(
     description="Sends summary of the meeting",
     guild_ids=[GUILD_ID]
 )
-@commands.has_any_role(*ALLOWED_ROLES)
+@commands.has_any_role(*CONFIG['allowed_roles'])
 async def send_summary_(
     ctx: discord.ApplicationContext,
     meeting_name: str = discord.Option(input_type=str,
@@ -274,7 +275,7 @@ async def send_summary_(
     description="Deletes recording of the meeting",
     guild_ids=[GUILD_ID]
 )
-@commands.has_any_role(*ALLOWED_ROLES)
+@commands.has_any_role(*CONFIG['allowed_roles'])
 async def delete_recording_(
     ctx: discord.ApplicationContext,
     meeting_name: str = discord.Option(
@@ -305,7 +306,7 @@ async def delete_recording_(
     description="Deletes whole meeting",
     guild_ids=[GUILD_ID]
 )
-@commands.has_any_role(*ALLOWED_ROLES)
+@commands.has_any_role(*CONFIG['allowed_roles'])
 async def delete_meeting_(
     ctx: discord.ApplicationContext,
     meeting_name: str = discord.Option(
