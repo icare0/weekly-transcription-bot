@@ -20,20 +20,19 @@ MEETINGS_PATH = os.path.join(ROOT_DIR, "meetings")
 os.makedirs(MEETINGS_PATH, exist_ok=True)
 
 MEETINGS = utils.meetings_info(MEETINGS_PATH)
+
 ALLOWED_ROLES = ['Admin', 'Przewodniczący sekcji', 'Weekly Transcription Bot Operator']
+IDLING_MESSAGE = "🗿 Pretends to listen"
+RECORDING_MESSAGE = "👂🏼 Capturing every word"
 
 async def meetings_autocomplete(ctx: discord.AutocompleteContext):
     return [m['name'] for m in MEETINGS]
 
 @bot.listen(once=True)
 async def on_ready():
-    print(f"✅ Bot online as {bot.user}")
+    print(f"Bot online as {bot.user}")
     await bot.sync_commands(force=True)
-    print("🔄 Commands synced")
-    print(f"📜 Registered commands: {[cmd.name for cmd in bot.application_commands]}")
-    print(f"📂 Registered meetings: {[meeting['name'] for meeting in MEETINGS]}")
-    
-    activity = discord.Game(name="🗿 Pretends to listen")
+    activity = discord.Game(name=IDLING_MESSAGE)
     await bot.change_presence(status=discord.Status.online, activity=activity)
     
 @bot.slash_command(
@@ -58,7 +57,6 @@ async def start_meeting_(
         channel = ctx.author.voice.channel
         await channel.connect()
         await ctx.guild.me.edit(mute=True)
-        print(f"🎙️ Bot joined vc: {channel.name}")
     else:
         return await ctx.respond("⚠️ You need to be in a voice channel to start recording the meeting")
 
@@ -81,24 +79,20 @@ async def start_meeting_(
         )
         await ctx.respond(f"🔴 Started recording the meeting `{meeting_name}` in a voice channel `{channel.name}`")
         
-        activity = discord.Game(name="👂🏼 Capturing every word")
+        activity = discord.Game(name=RECORDING_MESSAGE)
         await bot.change_presence(status=discord.Status.dnd, activity=activity)
     else:
         await ctx.respond("⚠️ Bot is not in a voice channel")
 
 async def finished_callback(sink: discord.sinks.MP3Sink, context: tuple):
     _, meeting_path, meeting_name = context
-    print(f"🔧 Processing the recording for meeting: {meeting_path}")
 
-    if not sink.audio_data:
-        print("⚠️ No audio data")
-        return
+    if not sink.audio_data: return
 
     audio_segs: list[pydub.AudioSegment] = []
     longest = pydub.AudioSegment.empty()
 
     for user_id, audio in sink.audio_data.items():
-        print(f"🔧 Processing audio data for user: {user_id}")
         audio.file.seek(0)
         seg = pydub.AudioSegment.from_file(audio.file, format="mp3")
 
@@ -115,8 +109,6 @@ async def finished_callback(sink: discord.sinks.MP3Sink, context: tuple):
     longest.export(output_path, format="mp3")
     
     MEETINGS[-1]['recorded'] = True
-    
-    print(f"✅ Recording saved: {output_path}") 
 
 @bot.slash_command(
     name="stop_meeting",
@@ -136,7 +128,7 @@ async def stop_recording_(ctx: discord.ApplicationContext):
     await vc.disconnect()
     message = await ctx.respond("🛑 Recording stopped")
     
-    activity = discord.Game(name="🗿 Pretends to listen")
+    activity = discord.Game(name=IDLING_MESSAGE)
     await bot.change_presence(status=discord.Status.online, activity=activity)
     
     meeting_name = MEETINGS[-1]['name']

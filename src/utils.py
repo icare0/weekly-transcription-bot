@@ -3,6 +3,24 @@ from pydub import AudioSegment
 from openai import OpenAI
 import math, os
 
+PROMPT = (
+        "Jesteś profesjonalnym asystentem, który dokładnie podsumowuje transkrypcję cotygodniowego spotkania Solvro Weekly koła naukowego Solvro. "
+        "Twoim celem jest stworzenie szczegółowego, ale czytelnego podsumowania, które zawiera wszystkie kluczowe informacje. "
+        "Podsumowanie powinno zawierać:\n"
+        "- 📌 **Główne tematy spotkania** – co zostało omówione?\n"
+        "- ✅ **Podjęte decyzje** – jakie wnioski i decyzje zapadły?\n"
+        "- 📝 **Zadania do wykonania** – kto jest odpowiedzialny za konkretne działania?\n"
+        "- ⏭️ **Plany na przyszłość** – co zaplanowano na kolejne spotkania lub działania?\n"
+        "- 🔹 **Dodatkowe istotne informacje** – np. problemy, wyzwania, sugestie.\n\n"
+        "Podsumowanie powinno być dobrze zorganizowane, logicznie uporządkowane i zawierać wszystkie istotne szczegóły. "
+        "Podsumowanie powinno byc w formacie .md (Markdown) dostosowanym do możliwości Discord. "
+        "Nie pomijaj ważnych informacji, ale staraj się unikać nadmiernych szczegółów i powtórzeń. "
+        "Zachowaj profesjonalny i przejrzysty styl. "
+        "Nie halucynuj, nie przeklinaj, nie używaj wulgaryzmów. "
+        "Na spotkaniach omawiane będa osiągnięcia z poprzedniego tygodnia zespołów: "
+        "Aplikacja ToPWR, Planer, Cube3D/Led Cube, Aplikacja i strona Juwenalia, Strona katedry W4, Eventownik, Promochator. "
+    )
+
 def meetings_info(meetings_dir: str) -> List[Dict]:
     meetings_info = []
     
@@ -54,16 +72,12 @@ def split_audio(file_path: str, max_size_mb=25) -> List[str]:
     return chunk_paths
 
 def transcribe_audio(file_path: str, openai_client: OpenAI):   
-    print(f"🔄 Transcribing file: {file_path}")
-    
     with open(file_path, "rb") as audio_file:
         response = openai_client.audio.transcriptions.create(
             model="whisper-1",
             file=audio_file,
             language="pl",
         )
-        
-    print(f"✅ Transcribed file: {file_path}")
 
     return response
 
@@ -72,11 +86,8 @@ def transcribe(file_path, openai_api_key: str, split_size=25):
     full_transcription = ""
     
     client = OpenAI(api_key=openai_api_key)
-
-    print(f"🔄 Transcription started: {file_path}")
     
     for chunk_path in chunk_paths:
-        print(f"⬆️ Uploading file: {chunk_path}")
         response = transcribe_audio(chunk_path, client)
         transcription_text = response.text
         full_transcription += transcription_text + " "
@@ -84,55 +95,29 @@ def transcribe(file_path, openai_api_key: str, split_size=25):
         if len(chunk_paths) > 1:
             os.remove(chunk_path)
     
-    print(f"✅ Transcription completed: {file_path}")
-    
     return full_transcription
 
 def save_transcription(transcription: str, output_path: str):
     with open(output_path, "w", encoding="utf-8") as txt_file:
         txt_file.write(transcription)
         
-    print(f"✅ Transcription saved: {output_path}")
-        
 def summarize_transcription(transcription_path: str, openai_api_key: str):
     client = OpenAI(api_key=openai_api_key)
     
-    prompt = (
-        "Jesteś profesjonalnym asystentem, który dokładnie podsumowuje transkrypcję cotygodniowego spotkania Solvro Weekly koła naukowego Solvro. "
-        "Twoim celem jest stworzenie szczegółowego, ale czytelnego podsumowania, które zawiera wszystkie kluczowe informacje. "
-        "Podsumowanie powinno zawierać:\n"
-        "- 📌 **Główne tematy spotkania** – co zostało omówione?\n"
-        "- ✅ **Podjęte decyzje** – jakie wnioski i decyzje zapadły?\n"
-        "- 📝 **Zadania do wykonania** – kto jest odpowiedzialny za konkretne działania?\n"
-        "- ⏭️ **Plany na przyszłość** – co zaplanowano na kolejne spotkania lub działania?\n"
-        "- 🔹 **Dodatkowe istotne informacje** – np. problemy, wyzwania, sugestie.\n\n"
-        "Podsumowanie powinno być dobrze zorganizowane, logicznie uporządkowane i zawierać wszystkie istotne szczegóły. "
-        "Podsumowanie powinno byc w formacie .md (Markdown) dostosowanym do możliwości Discord. "
-        "Nie pomijaj ważnych informacji, ale staraj się unikać nadmiernych szczegółów i powtórzeń. "
-        "Zachowaj profesjonalny i przejrzysty styl. "
-        "Nie halucynuj, nie przeklinaj, nie używaj wulgaryzmów. "
-        "Na spotkaniach omawiane będa osiągnięcia z poprzedniego tygodnia zespołów: "
-        "Aplikacja ToPWR, Planer, Cube3D/Led Cube, Aplikacja i strona Juwenalia, Strona katedry W4, Eventownik, Promochator. "
-    )
-    
-    print(f"🔄 Summarizing transcription")
     with open(transcription_path, "r", encoding="utf-8") as txt_file:
         response = client.chat.completions.create(
             model="gpt-4o", # byl gpt-3.5-turbo
             messages=[
-                {"role": "system", "content": prompt},
+                {"role": "system", "content": PROMPT},
                 {"role": "user", "content": f"Podsumuj tę transkrypcję:\n{txt_file.read()}"}
             ]
         )
 
-    print(f"✅ Summarized transcription")
     return response.choices[0].message.content
 
 def save_summary(summary: str, output_path: str):
     with open(output_path, "w", encoding="utf-8") as md_file:
         md_file.write(summary)
-
-    print(f"✅ Summary saved: {output_path}")
     
 def split_summary(summary: str) -> List[str]:
     blocks = []
