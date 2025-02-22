@@ -75,9 +75,9 @@ async def start_meeting_(
 
     if ctx.voice_client:
         ctx.voice_client.start_recording(
+            discord.sinks.MP3Sink(),
+            merge_recordings,
             (meeting_path, meeting_name),
-            sink=discord.sinks.MP3Sink(),
-            callback=merge_recordings,
             sync_start=True
         )
         await ctx.respond(f"🔴 Started recording the meeting `{meeting_name}` in a voice channel `{channel.name}`")
