@@ -2,8 +2,11 @@ import discord
 from discord.ext import commands
 import os
 import pydub
+from pydub.utils import which
 import utils
 import dotenv
+
+pydub.AudioSegment.converter = which("ffmpeg")
 
 dotenv.load_dotenv()
 TOKEN = os.getenv("DISCORD_APP_TOKEN")
@@ -71,11 +74,11 @@ async def start_meeting_(
     })
 
     if ctx.voice_client:
-        sink = discord.sinks.MP3Sink()
         ctx.voice_client.start_recording(
-            sink,
-            finished_callback,
-            (ctx, meeting_path, meeting_name)
+            (meeting_path, meeting_name),
+            sink=discord.sinks.MP3Sink(),
+            callback=merge_recordings,
+            sync_start=True
         )
         await ctx.respond(f"🔴 Started recording the meeting `{meeting_name}` in a voice channel `{channel.name}`")
         
@@ -84,15 +87,15 @@ async def start_meeting_(
     else:
         await ctx.respond("⚠️ Bot is not in a voice channel")
 
-async def finished_callback(sink: discord.sinks.MP3Sink, context: tuple):
-    _, meeting_path, meeting_name = context
+async def merge_recordings(sink: discord.sinks.MP3Sink, args: tuple):
+    meeting_path, meeting_name = args
 
     if not sink.audio_data: return
 
     audio_segs: list[pydub.AudioSegment] = []
     longest = pydub.AudioSegment.empty()
 
-    for user_id, audio in sink.audio_data.items():
+    for _, audio in sink.audio_data.items():
         audio.file.seek(0)
         seg = pydub.AudioSegment.from_file(audio.file, format="mp3")
 
