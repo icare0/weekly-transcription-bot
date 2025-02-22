@@ -245,7 +245,7 @@ async def send_summary_(
         name="output_type",
         description="Type of output",
         required=True,
-        choices=["File", "Text"],
+        choices=["message", "file"],
     )
 ):
     await ctx.defer()
@@ -265,7 +265,7 @@ async def send_summary_(
         return await ctx.respond(f"❌ No summary for meeting `{meeting_name}`")
     
     message = await ctx.respond("🔄 Sending summary...")
-    if type_ == "File":
+    if type_ == "file":
         return await message.edit(content="", file=discord.File(md_path))
     
     with open(md_path, "r", encoding="utf-8") as file:
