@@ -10,6 +10,9 @@ module.exports = {
     if(!hasPermission)
       return await interaction.reply({ embeds: [noPermissionEmbed], ephemeral: true });
 
+    if(state.meetings.length === 0)
+      return await interaction.reply({ content: ':x: No meetings found', ephemeral: true });
+
     await interaction.reply(':arrow_down: Meetings list');
     const message = await interaction.fetchReply();
 
