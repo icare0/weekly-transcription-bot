@@ -73,9 +73,10 @@ module.exports = {
 
       if(!fs.existsSync(wavPath)) {
         console.error('WAV file does not exist');
+        state.meetings = state.meetings.filter(m => m.name !== state.currentMeeting);
         state.currentMeeting = null;
         await interaction.editReply({ embeds: [errorWhileRecordingEmbed] });
-
+        
         try {
           fs.rmSync(meetingFolder, { recursive: true, force: true });
           console.log(`Deleted meeting folder: ${meetingFolder}`);

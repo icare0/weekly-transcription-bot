@@ -77,7 +77,6 @@ module.exports = {
     const mp3Path = wavPath.replace('.wav', '.mp3');
 
     if(!fs.existsSync(wavPath)) {
-      console.error('WAV file does not exist');
       await msg1.edit({ embeds: [errorWhileRecordingEmbed] });
       state.currentMeeting = null;
       await interaction.editReply({ embeds: [processingFailedEmbed] });
