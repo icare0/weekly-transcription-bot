@@ -9,7 +9,7 @@ const {
   meetingDoesNotExistEmbed
 } = require('../../utils/embeds.js');
 
-const config = require('../../utils/config.js');
+const config = require('../../../config.json');
 
 module.exports = {
   async autocomplete(interaction) {
