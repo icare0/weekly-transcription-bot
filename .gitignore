@@ -1,13 +1,6 @@
-__pycache__/
-*.pyc
-*.pyo
-venv/
-meetings/
-*.env
+node_modules/
+.env
 .vscode/
-.idea/
-*.swp
-*.cog.pyc
-*.pyd
-
+package-lock.json
+meetings/
 todo.txt

@@ -22,15 +22,11 @@
 
   "transcription_model": "whisper-1",
   "transcription_language": "pl",
+  "transcription_max_size_MB": 24,
 
   "allowed_roles": [
     "Admin",
     "Przewodniczący sekcji",
     "Weekly Transcription Bot Operator"
-  ],
-  
-  "activity": {
-    "recording": "👂🏼 Capturing every word",
-    "not_recording": "🗿 Pretends to listen"
-  }
+  ]
 }

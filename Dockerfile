@@ -1,17 +1,11 @@
-FROM python:3.9-slim
+FROM node:18
 
 WORKDIR /bot
 
-COPY requirements.txt .
+COPY package*.json ./
 
-RUN apt-get update && \
-    apt-get install -y ffmpeg libopus0 && \
-    rm -rf /var/lib/apt/lists/*
+RUN npm install
 
-RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
 
-COPY . /bot
-
-EXPOSE 5000
-
-CMD ["python", "src/bot.py"]
+CMD ["npm", "run", "start"]
