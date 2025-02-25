@@ -37,12 +37,18 @@ This project is a Discord bot designed to record, transcribe, and summarize week
 
     ```env
     TOKEN=<your-discord-bot-token>
-    CLIENT_ID=<your-discord-client-id>
+    CLIENT_ID=<your-discord-app-client-id>
     GUILD_ID=<your-guild-id>
     OPENAI_API_KEY=<your-openai-api-key>
     ```
 
-4. Start the bot:
+4. Invite the bot:
+
+    ```sh
+    https://discord.com/oauth2/authorize?client_id=<your-discord-app-client-id>&permissions=3147776&scope=bot%20applications.commands
+    ```
+
+5. Start the bot:
 
     ```sh
     npm run start
