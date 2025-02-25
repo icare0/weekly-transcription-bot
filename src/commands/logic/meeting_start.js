@@ -88,14 +88,20 @@ module.exports = {
       }
     });
 
+    const subscribedUsers = new Set();
+
     const receiver = state.connection.receiver;
-    receiver.speaking.once('start', (userId) => {
+    receiver.speaking.on('start', (userId) => {
+      if(subscribedUsers.has(userId)) return;
+
       const audioStream = receiver.subscribe(userId, {
         end: {
           behaviour: EndBehaviorType.AfterSilence,
           duration: 300
         }
       });
+
+      subscribedUsers.add(userId);
 
       const opusDecoder = new prism.opus.Decoder({
         rate: 48000,
