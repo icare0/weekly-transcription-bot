@@ -39,14 +39,14 @@ module.exports = {
     const meetingPath = path.join(MEETINGS_DIR, meetingName);
 
     if(!fs.existsSync(meetingPath))
-      return await interaction.editReply({ embeds: [meetingDoesNotExistEmbed] });
+      return await interaction.editReply({ embeds: [meetingDoesNotExistEmbed], ephemeral: true });
 
     if(what === 'recording') {
       const files = fs.readdirSync(meetingPath);
       const audioFiles = files.filter(file => file.endsWith('.wav') || file.endsWith('.mp3'));
 
       if(audioFiles.length === 0)
-        return await interaction.editReply({ embeds: [noRecordingsExistEmbed] });
+        return await interaction.editReply({ embeds: [noRecordingsExistEmbed], ephemeral: true });
 
       audioFiles.forEach(file => fs.unlinkSync(path.join(meetingPath, file)));
 

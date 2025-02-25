@@ -50,13 +50,13 @@ module.exports = {
     .setTimestamp(),
 
   meetingDeletedEmbed: new EmbedBuilder()
-    .setColor(0xff0000)
+    .setColor(0x00ff00)
     .setTitle(':wastebasket: Meeting Deleted')
     .setDescription('The meeting has been successfully deleted.')
     .setTimestamp(),
 
   fileDeletedEmbed: new EmbedBuilder()
-    .setColor(0xff0000)
+    .setColor(0x00ff00)
     .setTitle(':floppy_disk: Recording Deleted')
     .setDescription('A recording file has been successfully deleted.')
     .setTimestamp(),
