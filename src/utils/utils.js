@@ -144,9 +144,10 @@ module.exports = {
     let messageChunk = "";
   
     for(const line of lines) {
-      if((messageChunk + "\n" + line).length > 2000)
+      if((messageChunk + "\n" + line).length > 2000) {
         await thread.send(messageChunk);
-      else 
+        messageChunk = line;
+      } else 
         messageChunk += (messageChunk ? "\n" : "") + line;
     }
   
