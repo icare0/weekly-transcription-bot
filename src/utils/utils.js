@@ -7,30 +7,6 @@ const path = require('path');
 const config = require('../../config.json');
 
 module.exports = {
-  async convertWavToMp3(inputPath, outputPath) {
-    return new Promise((resolve, reject) => {
-      const ffmpegProcess = spawn(ffmpeg, [
-        '-i', inputPath,
-        '-acodec', 'libmp3lame',
-        '-b:a', '128k',
-        '-y',
-        outputPath
-      ]);
-
-      ffmpegProcess.on('close', (code) => {
-        if(code === 0 || code === null) {
-          resolve(outputPath);
-        } else {
-          reject(`FFmpeg finished with code: ${code}`);
-        }
-      });
-
-      ffmpegProcess.on('error', (err) => {
-        reject(`Error during ffmpeg launch: ${err.message}`);
-      });
-    });
-  },
-
   async splitAudioFile(filePath, maxFileSize_MB) {
     const sizeInBytes = fs.statSync(filePath).size;
     if(sizeInBytes <= maxFileSize_MB * 1024 * 1024)
@@ -57,7 +33,7 @@ module.exports = {
     ];
 
     return new Promise((resolve, reject) => {
-      const ffmpegProcess = spawn('ffmpeg', ffmpegArgs)
+      const ffmpegProcess = spawn(ffmpeg, ffmpegArgs)
 
       ffmpegProcess.on('close', (code) => {
         if(code === 0 || code === null) {
@@ -75,7 +51,7 @@ module.exports = {
     })
   },
 
-  async transcribe(audioParts, message) {
+  async transcribe(audioParts) {
     let fullTranscription = "";
 
     const openai = new OpenAI(process.env.OPENAI_API_KEY);
@@ -153,5 +129,19 @@ module.exports = {
   
     if(messageChunk)
       await thread.send(messageChunk);
+  },
+
+  async waitForDrain(stream) {
+    return new Promise(resolve => {
+      if (stream.writableLength > 0) {
+        const check = () => {
+          if (stream.writableLength === 0) resolve();
+          else stream.once('drain', check);
+        };
+        check();
+      } else {
+        resolve();
+      }
+    });
   },
 }

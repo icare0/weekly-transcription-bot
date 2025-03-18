@@ -91,30 +91,6 @@ module.exports = {
     .setDescription('An error occurred while the recording.')
     .setTimestamp(),
 
-  conversionStartedEmbed: new EmbedBuilder()
-    .setColor(0x3498db)
-    .setTitle(':arrows_counterclockwise: Conversion Started')
-    .setDescription('The WAV file is being converted to MP3...')
-    .setTimestamp(),
-
-  conversionSuccessEmbed: new EmbedBuilder()
-    .setColor(0x00ff00)
-    .setTitle(':white_check_mark: Converted to MP3')
-    .setDescription('The WAV file has been successfully converted to MP3.')
-    .setTimestamp(),
-
-  conversionFailedEmbed: new EmbedBuilder()
-    .setColor(0xff0000)
-    .setTitle(':x: Conversion Failed')
-    .setDescription('An error occurred while converting the WAV file to MP3.')
-    .setTimestamp(),
-
-  wavDeletionFailedEmbed: new EmbedBuilder()
-    .setColor(0xff0000)
-    .setTitle(':x: Deleting the WAV file failed')
-    .setDescription('Failed to delete the original WAV file after conversion.')
-    .setTimestamp(),
-
   splittingStartedEmbed: new EmbedBuilder()
     .setColor(0x3498db)
     .setTitle(':arrows_counterclockwise: Splitting Audio File')

@@ -4,4 +4,6 @@ module.exports = {
   finishedRecordingCode: null,
   meetings: null,
   currentMeeting: null,
+  audioMixer: null,
+  cleanupRecording: null,
 };
