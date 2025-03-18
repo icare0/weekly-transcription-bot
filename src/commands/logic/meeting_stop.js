@@ -48,6 +48,11 @@ module.exports = {
         return await interaction.editReply({ embeds: [noActiveRecordingEmbed], ephemeral: true });
 
       try {
+        if(state.connection) {
+          state.connection.destroy();
+          state.connection = null;
+        }
+
         if(state.audioMixer) {
           state.audioMixer.end();
           await waitForDrain(state.audioMixer);
@@ -56,11 +61,6 @@ module.exports = {
         if(state.recordingProcess) {
           state.recordingProcess.stdin.end();
           await new Promise(resolve => state.recordingProcess.once('close', resolve));
-        }
-
-        if(state.connection) {
-          state.connection.destroy();
-          state.connection = null;
         }
 
         const meetingPath = path.join(__dirname, '..', '..', '..', 'meetings', state.currentMeeting);
