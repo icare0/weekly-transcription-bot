@@ -1,9 +1,10 @@
 const state = require('../../utils/state.js');
 const path = require('path');
 const fs = require('fs');
+const AsyncLock = require('async-lock');
 
 const {
-  convertWavToMp3,
+  waitForDrain,
   splitAudioFile,
   transcribe,
   summarizeTranscription,
@@ -14,12 +15,8 @@ const {
   noPermissionEmbed,
   noActiveRecordingEmbed,
   recordingStoppedEmbed,
-  recordingFailedEmbed,
   transcriptionFailedEmbed,
   summaryFailedEmbed,
-  conversionFailedEmbed,
-  conversionStartedEmbed,
-  conversionSuccessEmbed,
   splittingStartedEmbed,
   splittingFailedEmbed,
   splittingSuccessEmbed,
@@ -34,129 +31,114 @@ const {
 
 const config = require('../../../config.json');
 
+const stateLock = new AsyncLock();
+
 module.exports = {
   async execute(interaction) {
+    await interaction.deferReply();
+
     const memberRoles = interaction.member.roles.cache.map(role => role.name);
     const hasPermission = memberRoles.some(role => config.allowed_roles.includes(role));
 
     if(!hasPermission)
-      return await interaction.reply({ embeds: [noPermissionEmbed], ephemeral: true });
+      return await interaction.editReply({ embeds: [noPermissionEmbed], ephemeral: true });
 
-    if(!state.recordingProcess || !state.connection)
-      return await interaction.reply({ embeds: [noActiveRecordingEmbed], ephemeral: true });
+    await stateLock.acquire('recording', async () => {
+      if(!state.recordingProcess || !state.connection)
+        return await interaction.editReply({ embeds: [noActiveRecordingEmbed], ephemeral: true });
 
-    state.recordingProcess.stdin.end();
-    state.recordingProcess.kill();
-    state.recordingProcess = null;
+      try {
+        if(state.audioMixer) {
+          state.audioMixer.end();
+          await waitForDrain(state.audioMixer);
+        }
 
-    state.connection.destroy();
-    state.connection = null;
+        if(state.recordingProcess) {
+          state.recordingProcess.stdin.end();
+          await new Promise(resolve => state.recordingProcess.once('close', resolve));
+        }
 
-    state.meetings.push({
-      name: state.currentMeeting,
-      recorded: true,
-      transcribed: false,
-      summarized: false
-    });
+        const meetingPath = path.join(__dirname, '..', '..', '..', 'meetings', state.currentMeeting);
+        const mp3Path = path.join(meetingPath, `${state.currentMeeting}.mp3`);
 
-    if(state.finishedRecordingCode === 1)
-      return await interaction.reply({ embeds: [recordingFailedEmbed] });
+        if(!fs.existsSync(mp3Path)) {
+          await interaction.editReply({ embeds: [errorWhileRecordingEmbed] });
+          return;
+        }
 
-    const meetingPath = path.join(__dirname, '..', '..', '..', 'meetings', state.currentMeeting);
-
-    await interaction.reply({ embeds: [recordingStoppedEmbed] });
-    const message = await interaction.fetchReply();
-
-    const thread = await message.startThread({
-      name: `Summary of the meeting '${state.currentMeeting}'`,
-    });
-
-    const msg1 = await thread.send({ embeds: [conversionStartedEmbed] });
-
-    const wavPath = path.join(meetingPath, `${state.currentMeeting}.wav`);
-    const mp3Path = wavPath.replace('.wav', '.mp3');
-
-    if(!fs.existsSync(wavPath)) {
-      await msg1.edit({ embeds: [errorWhileRecordingEmbed] });
-      state.currentMeeting = null;
-      await interaction.editReply({ embeds: [processingFailedEmbed] });
-      return;
-    }
-
-    let audioPath = wavPath;
-
-    await convertWavToMp3(wavPath, mp3Path)
-      .then(async () => {
-        msg1.edit({ embeds: [conversionSuccessEmbed] });
-
-        fs.unlink(wavPath, async (err) => {
-          if(err) {
-            console.error(`Failed to delete WAV file: ${err}`);
-            await thread.send({ embeds: [wavDeletionFailedEmbed] });
-          } else {
-            console.log('WAV file deleted successfully');
-          }
+        state.meetings.push({
+          name: state.currentMeeting,
+          recorded: true,
+          transcribed: false,
+          summarized: false
         });
 
-        audioPath = mp3Path;
-      })
-      .catch(async (error) => {
-        console.error('Conversion error:', error);
-        await msg1.edit({ embeds: [conversionFailedEmbed] });
-      });
+        await interaction.editReply({ embeds: [recordingStoppedEmbed] });
+        const message = await interaction.fetchReply();
+        const thread = await message.startThread({
+          name: `Summary of the meeting '${state.currentMeeting}'`,
+        });
 
-    const msg2 = await thread.send({ embeds: [splittingStartedEmbed] });
+        const msg2 = await thread.send({ embeds: [splittingStartedEmbed] });
+        let audioPath = mp3Path;
+        let audioParts = [audioPath];
 
-    let audioParts = [audioPath];
+        try {
+          audioParts = await splitAudioFile(audioPath, config.transcription_max_size_MB);
+          await msg2.edit({ embeds: [splittingSuccessEmbed(audioParts.length)] });
+        } catch(err) {
+          console.error('Error while splitting the file: ', err);
+          await msg2.edit({ embeds: [splittingFailedEmbed] });
+          throw err;
+        }
 
-    splitAudioFile(audioPath, config.transcription_max_size_MB)
-      .then(async (parts) => {
-        audioParts = parts;
-        await msg2.edit({ embeds: [splittingSuccessEmbed(parts.length)] });
-      })
-      .catch(async (err) => {
-        console.error('Error while splitting the file: ', err);
-        state.currentMeeting = null;
-        await msg2.edit({ embeds: [splittingFailedEmbed] });
+        const msg3 = await thread.send({ embeds: [transcriptionStartedEmbed] });
+        const transcription = await transcribe(audioParts);
+
+        if(!transcription) {
+          await msg3.edit({ embeds: [transcriptionFailedEmbed] });
+          throw new Error('Transcription failed');
+        }
+
+        const transcriptionFile = path.join(meetingPath, `${state.currentMeeting}.txt`);
+        fs.writeFileSync(transcriptionFile, transcription, { encoding: 'utf8' });
+        await msg3.edit({ embeds: [transcriptionCompletedEmbed] });
+
+        const msg4 = await thread.send({ embeds: [summaryStartedEmbed] });
+        const summary = await summarizeTranscription(transcriptionFile, msg4);
+
+        if(!summary) {
+          await msg4.edit({ embeds: [summaryFailedEmbed] });
+          throw new Error('Summary failed');
+        }
+
+        const summaryFile = path.join(meetingPath, `${state.currentMeeting}.md`);
+        fs.writeFileSync(summaryFile, summary, { encoding: 'utf8' });
+        await msg4.edit({ embeds: [summaryCompletedEmbed] });
+
+        await sendLongMessageToThread(thread, summary);
+        await interaction.editReply({ embeds: [processingSuccessEmbed] });
+
+      } catch(error) {
+        console.error('Stop command error:', error);
         await interaction.editReply({ embeds: [processingFailedEmbed] });
-        return;
-      });
+      } finally {
+        state.connection = null;
+        state.recordingProcess = null;
+        state.audioMixer = null;
+        state.cleanupRecording = null;
+        state.currentMeeting = null;
 
-    const msg3 = await thread.send({ embeds: [transcriptionStartedEmbed] });
-
-    const transcription = await transcribe(audioParts, msg3);
-
-    if(!transcription) {
-      await msg3.edit({ embeds: [transcriptionFailedEmbed] });
-      state.currentMeeting = null;
-      await interaction.editReply({ embeds: [processingFailedEmbed] });
-      return;
-    }
-
-    const transcriptionFile = path.join(meetingPath, `${state.currentMeeting}.txt`);
-    fs.writeFileSync(transcriptionFile, transcription, { encoding: 'utf8' });
-
-    await msg3.edit({ embeds: [transcriptionCompletedEmbed] });
-
-    const msg4 = await thread.send({ embeds: [summaryStartedEmbed] });
-
-    const summary = await summarizeTranscription(transcriptionFile, msg4);
-
-    if(!summary) {
-      await msg4.edit({ embeds: [summaryFailedEmbed] });
-      state.currentMeeting = null;
-      await interaction.editReply({ embeds: [processingFailedEmbed] });
-      return;
-    }
-
-    const summaryFile = path.join(meetingPath, `${state.currentMeeting}.md`);
-    fs.writeFileSync(summaryFile, summary, { encoding: 'utf8' });
-
-    await msg4.edit({ embeds: [summaryCompletedEmbed] });
-
-    await sendLongMessageToThread(thread, summary);
-    await interaction.editReply({ embeds: [processingSuccessEmbed] });
-
-    state.currentMeeting = null;
+        if(audioParts && audioParts.length > 1) {
+          for(const part of audioParts) {
+            try {
+              fs.unlinkSync(part);
+            } catch(err) {
+              console.error(`Failed to delete temporary file: ${part}`, err);
+            }
+          }
+        }
+      }
+    });
   }
 };

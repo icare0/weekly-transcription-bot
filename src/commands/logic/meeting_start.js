@@ -1,4 +1,4 @@
-const { joinVoiceChannel, EndBehaviorType } = require('@discordjs/voice');
+const { joinVoiceChannel, EndBehaviorType, VoiceConnectionStatus } = require('@discordjs/voice');
 const fs = require('fs');
 const path = require('path');
 const prism = require('prism-media');
@@ -6,6 +6,8 @@ const { spawn } = require('child_process');
 const ffmpeg = require('ffmpeg-static');
 const state = require('../../utils/state.js');
 const config = require('../../../config.json');
+const AsyncLock = require('async-lock');
+const { waitForDrain } = require('../../utils/utils.js');
 
 const {
   recordingStartedEmbed,
@@ -16,99 +18,166 @@ const {
   errorWhileRecordingEmbed
 } = require('../../utils/embeds.js');
 
+const stateLock = new AsyncLock();
+
 module.exports = {
   async execute(interaction) {
+    await interaction.deferReply({ ephemeral: false });
+
     const memberRoles = interaction.member.roles.cache.map(role => role.name);
     const hasPermission = memberRoles.some(role => config.allowed_roles.includes(role));
 
     if(!hasPermission)
-      return await interaction.reply({ embeds: [noPermissionEmbed], ephemeral: true });
+      return await interaction.editReply({ embeds: [noPermissionEmbed], ephemeral: true });
 
-    if(state.currentMeeting)
-      return await interaction.reply({ embeds: [recordingAlreadyStartedEmbed], ephemeral: true });
+    await stateLock.acquire('recording', async () => {
+      if(state.currentMeeting)
+        return await interaction.editReply({ embeds: [recordingAlreadyStartedEmbed], ephemeral: true });
 
-    const meetingName = interaction.options.getString('name');
+      const meetingName = interaction.options.getString('name');
 
-    if(state.meetings.map(m => m.name).includes(meetingName))
-      return await interaction.reply({ embeds: [meetingAlreadyExistsEmbed], ephemeral: true });
+      if(state.meetings.map(m => m.name).includes(meetingName))
+        return await interaction.editReply({ embeds: [meetingAlreadyExistsEmbed], ephemeral: true });
 
-    const voiceChannel = interaction.member.voice.channel;
-    if(!voiceChannel)
-      return await interaction.reply({ embeds: [noVoiceChannelEmbed], ephemeral: true });
+      const voiceChannel = interaction.member.voice.channel;
+      if(!voiceChannel)
+        return await interaction.editReply({ embeds: [noVoiceChannelEmbed], ephemeral: true });
 
-    state.connection = joinVoiceChannel({
-      channelId: voiceChannel.id,
-      guildId: interaction.guild.id,
-      adapterCreator: interaction.guild.voiceAdapterCreator,
-      selfDeaf: false,
-      selfMute: true
-    });
+      state.connection = joinVoiceChannel({
+        channelId: voiceChannel.id,
+        guildId: interaction.guild.id,
+        adapterCreator: interaction.guild.voiceAdapterCreator,
+        selfDeaf: false,
+        selfMute: true
+      });
 
-    state.currentMeeting = meetingName;
-    await interaction.reply({ embeds: [recordingStartedEmbed] });
-
-    const MEETINGS_DIR = path.join(__dirname, '../../../meetings/');
-    const meetingFolder = path.join(MEETINGS_DIR, state.currentMeeting);
-
-    if(!fs.existsSync(meetingFolder))
-      fs.mkdirSync(meetingFolder, { recursive: true });
-
-    const wavPath = path.join(meetingFolder, `${state.currentMeeting}.wav`);
-    state.recordingProcess = spawn(ffmpeg, [
-      '-f', 's16le',
-      '-ar', '48000',
-      '-ac', '1',
-      '-i', 'pipe:0',
-      '-y',
-      wavPath
-    ]);
-
-    state.recordingProcess.on('error', (err) => {
-      console.error("Recording process error: ", err);
-      interaction.editReply({ embeds: [errorWhileRecordingEmbed] });
-    });
-
-    state.recordingProcess.on('close', async (code) => {
-      state.finishedRecordingCode = code;
-
-      if(!fs.existsSync(wavPath)) {
-        console.error('WAV file does not exist');
-        state.meetings = state.meetings.filter(m => m.name !== state.currentMeeting);
-        state.currentMeeting = null;
-        await interaction.editReply({ embeds: [errorWhileRecordingEmbed] });
-        
-        try {
-          fs.rmSync(meetingFolder, { recursive: true, force: true });
-          console.log(`Deleted meeting folder: ${meetingFolder}`);
-        } catch (err) {
-          console.error(`Failed to delete meeting folder: ${meetingFolder}`, err);
-        }
-
-        return;
+      if(!state.connection) {
+        return await interaction.editReply({ embeds: [errorWhileRecordingEmbed] });
       }
-    });
 
-    const subscribedUsers = new Set();
+      state.currentMeeting = meetingName;
+      await interaction.editReply({ embeds: [recordingStartedEmbed] });
 
-    const receiver = state.connection.receiver;
-    receiver.speaking.on('start', (userId) => {
-      if(subscribedUsers.has(userId)) return;
+      const MEETINGS_DIR = path.join(__dirname, '../../../meetings/');
+      const meetingFolder = path.join(MEETINGS_DIR, state.currentMeeting);
 
-      const audioStream = receiver.subscribe(userId, {
-        end: {
-          behaviour: EndBehaviorType.AfterSilence,
-          duration: 300
+      if(!fs.existsSync(meetingFolder))
+        fs.mkdirSync(meetingFolder, { recursive: true });
+
+      const mp3Path = path.join(meetingFolder, `${state.currentMeeting}.mp3`);
+      state.audioMixer = new prism.VolumeTransformer({
+        type: 's16le',
+        volume: 1.0
+      });
+
+      state.recordingProcess = spawn(ffmpeg, [
+        '-thread_queue_size', '1024',
+        '-f', 's16le',
+        '-ar', '48000',
+        '-ac', '1',
+        '-i', 'pipe:0',
+        '-codec:a', 'libmp3lame',
+        '-q:a', '2',
+        '-filter:a', 'apad=pad_dur=1,loudnorm=I=-16:TP=-1.5:LRA=11',
+        '-fflags', '+genpts',
+        '-flush_packets', '1',
+        '-y',
+        mp3Path
+      ]);
+
+      state.cleanupRecording = async () => {
+        if(state.audioMixer) {
+          state.audioMixer.end();
+          await waitForDrain(state.audioMixer);
+        }
+
+        if(state.recordingProcess) {
+          state.recordingProcess.stdin.end();
+          await new Promise(resolve => state.recordingProcess.once('close', resolve));
+        }
+
+        for(const [userId, streamInfo] of userStreams) {
+          streamInfo.audioStream.destroy();
+          streamInfo.pcmTransformer.destroy();
+          streamInfo.opusDecoder.destroy();
+        }
+        userStreams.clear();
+      };
+
+      state.recordingProcess.on('error', (err) => {
+        console.error("Recording process error: ", err);
+        interaction.editReply({ embeds: [errorWhileRecordingEmbed] });
+      });
+
+      state.recordingProcess.on('close', async (code) => {
+        state.finishedRecordingCode = code;
+
+        if(!fs.existsSync(mp3Path)) {
+          console.error('MP3 file does not exist');
+          await interaction.editReply({ embeds: [errorWhileRecordingEmbed] });
+          return;
+        }
+
+        console.log('Recording stopped and file saved.');
+      });
+
+      state.audioMixer.pipe(state.recordingProcess.stdin);
+
+      const receiver = state.connection.receiver;
+      const userStreams = new Map();
+
+      receiver.speaking.on('start', (userId) => {
+        if(userStreams.has(userId)) return;
+
+        const opusDecoder = new prism.opus.Decoder({ rate: 48000, channels: 1 });
+        const pcmTransformer = new prism.VolumeTransformer({
+          type: 's16le',
+          volume: 0.8
+        });
+
+        const audioStream = receiver.subscribe(userId, {
+          end: {
+            behaviour: EndBehaviorType.AfterSilence,
+            duration: 300
+          }
+        });
+
+        if(state.audioMixer) {
+          audioStream
+            .pipe(opusDecoder)
+            .pipe(pcmTransformer)
+            .on('data', (chunk) => {
+              if(!state.audioMixer.write(chunk)) {
+                audioStream.pause();
+              }
+            });
+
+          state.audioMixer.on('drain', () => audioStream.resume());
+        }
+
+        userStreams.set(userId, {
+          audioStream,
+          pcmTransformer,
+          opusDecoder
+        });
+      });
+
+      receiver.speaking.on('end', (userId) => {
+        const streamInfo = userStreams.get(userId);
+        if(streamInfo) {
+          streamInfo.audioStream.destroy();
+          streamInfo.pcmTransformer.destroy();
+          streamInfo.opusDecoder.destroy();
+          userStreams.delete(userId);
         }
       });
 
-      subscribedUsers.add(userId);
-
-      const opusDecoder = new prism.opus.Decoder({
-        rate: 48000,
-        channels: 1
+      state.connection.on('stateChange', (oldState, newState) => {
+        if(newState.status === VoiceConnectionStatus.Disconnected) {
+          console.error('Unexpected disconnection!');
+          state.cleanupRecording();
+        }
       });
-
-      audioStream.pipe(opusDecoder).pipe(state.recordingProcess.stdin);
     });
   }
 };
