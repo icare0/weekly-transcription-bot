@@ -120,11 +120,13 @@ module.exports = {
         state.audioMixer = new PCMixer();
 
         state.recordingProcess = spawn(ffmpeg, [
-          '-thread_queue_size', '4096',
+          '-re',
+          '-thread_queue_size', '1024',
           '-f', 's16le',
           '-ar', '48000',
           '-ac', '1',
           '-i', 'pipe:0',
+          '-fflags', '+genpts',
           '-codec:a', 'libmp3lame',
           '-q:a', '2',
           '-y',
