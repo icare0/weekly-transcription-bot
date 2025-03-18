@@ -58,6 +58,11 @@ module.exports = {
           await new Promise(resolve => state.recordingProcess.once('close', resolve));
         }
 
+        if(state.connection) {
+          state.connection.destroy();
+          state.connection = null;
+        }
+
         const meetingPath = path.join(__dirname, '..', '..', '..', 'meetings', state.currentMeeting);
         const mp3Path = path.join(meetingPath, `${state.currentMeeting}.mp3`);
 
@@ -128,16 +133,6 @@ module.exports = {
         state.audioMixer = null;
         state.cleanupRecording = null;
         state.currentMeeting = null;
-
-        if(audioParts && audioParts.length > 1) {
-          for(const part of audioParts) {
-            try {
-              fs.unlinkSync(part);
-            } catch(err) {
-              console.error(`Failed to delete temporary file: ${part}`, err);
-            }
-          }
-        }
       }
     });
   }
