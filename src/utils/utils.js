@@ -1,5 +1,3 @@
-const { spawn } = require('child_process');
-const ffmpeg = require('ffmpeg-static');
 const fs = require('fs');
 const OpenAI = require('openai');
 const path = require('path');
@@ -8,47 +6,34 @@ const config = require('../../config.json');
 
 module.exports = {
   async splitAudioFile(filePath, maxFileSize_MB) {
-    const sizeInBytes = fs.statSync(filePath).size;
-    if(sizeInBytes <= maxFileSize_MB * 1024 * 1024)
+    const maxFileSize_Bytes = maxFileSize_MB * 1024 * 1024;
+    const fileExtension = path.extname(filePath).toLowerCase();
+  
+    if(fileExtension !== '.mp3')
+      throw new Error('Unsupported file format. Only MP3 files are supported.');
+  
+    if(!fs.existsSync(filePath))
+      throw new Error('File does not exist.');
+  
+    const fileBuffer = fs.readFileSync(filePath);
+    const fileSize = fileBuffer.length;
+  
+    if(fileSize <= maxFileSize_Bytes)
       return [filePath];
-
-    const maxTime = {
-      ".wav": Math.floor(maxFileSize_MB * 10.41), //? 1MB = 10.42sec (48000, mono, 16bit)
-      ".mp3": Math.floor(maxFileSize_MB * 62.5)   //? 1MB = 62.50sec (128kbps)
+  
+    const partFiles = [];
+    let start = 0;
+  
+    while(start < fileSize) {
+      const end = Math.min(start + maxFileSize_Bytes, fileSize);
+      const chunk = fileBuffer.slice(start, end);
+      const partFilePath = `${filePath}_part${partFiles.length + 1}`;
+      fs.writeFileSync(partFilePath, chunk);
+      partFiles.push(partFilePath);
+      start = end;
     }
-    
-    const fileExtension = path.extname(filePath);
-    const baseName = path.basename(filePath, fileExtension) ;
-    const outputDir = path.dirname(filePath);
-
-    const outputPattern = path.join(outputDir, `${baseName}_part%03d${fileExtension}`);
-
-    const ffmpegArgs = [
-      '-i', filePath,
-      '-f', 'segment',
-      '-segment_time', `${maxTime[fileExtension]}`,
-      '-c', 'copy',
-      '-reset_timestamps', '1',
-      outputPattern,
-    ];
-
-    return new Promise((resolve, reject) => {
-      const ffmpegProcess = spawn(ffmpeg, ffmpegArgs)
-
-      ffmpegProcess.on('close', (code) => {
-        if(code === 0 || code === null) {
-          const files = fs.readdirSync(outputDir);
-          const partFiles = files.filter((file) => file.startsWith(`${baseName}_part`) && file.endsWith(fileExtension));
-          resolve(partFiles.map((file) => path.join(outputDir, file)));
-        } else {
-          reject(new Error(`FFmpeg finished with code: ${code}`));
-        }
-      })
-
-      ffmpegProcess.stderr.on('data', (data) => {
-        console.error(`FFmpeg stderr: ${data}`);
-      })
-    })
+  
+    return partFiles;
   },
 
   async transcribe(audioParts) {
