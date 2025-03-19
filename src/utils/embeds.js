@@ -60,17 +60,21 @@ module.exports = {
     .setTitle(':floppy_disk: Recording Deleted')
     .setDescription('A recording file has been successfully deleted.')
     .setTimestamp(),
-  
+
   noPermissionEmbed: new EmbedBuilder()
     .setColor(0xff0000)
     .setTitle(':no_entry_sign: You do not have permission to use this command')
-    .setDescription('You lack the necessary permissions to execute this command.')
+    .setDescription(
+      'You lack the necessary permissions to execute this command.'
+    )
     .setTimestamp(),
 
   recordingAlreadyStartedEmbed: new EmbedBuilder()
     .setColor(0xffcc00)
     .setTitle(':warning: A meeting is already being recorded')
-    .setDescription('Please stop the current recording before starting a new one.')
+    .setDescription(
+      'Please stop the current recording before starting a new one.'
+    )
     .setTimestamp(),
 
   meetingAlreadyExistsEmbed: new EmbedBuilder()
@@ -94,16 +98,21 @@ module.exports = {
   splittingStartedEmbed: new EmbedBuilder()
     .setColor(0x3498db)
     .setTitle(':arrows_counterclockwise: Splitting Audio File')
-    .setDescription('Splitting the file into chunks of the configured max size.')
+    .setDescription(
+      'Splitting the file into chunks of the configured max size.'
+    )
     .setTimestamp(),
 
-  splittingSuccessEmbed: (numParts) => new EmbedBuilder()
-    .setColor(0x00ff00)
-    .setTitle(':white_check_mark: Splitting Complete')
-    .setDescription(numParts === 1 
-      ? 'No splitting was needed. The file is within the allowed size limit.' 
-      : `The file has been split into ${numParts} parts successfully.`)
-    .setTimestamp(),
+  splittingSuccessEmbed: (numParts) =>
+    new EmbedBuilder()
+      .setColor(0x00ff00)
+      .setTitle(':white_check_mark: Splitting Complete')
+      .setDescription(
+        numParts === 1
+          ? 'No splitting was needed. The file is within the allowed size limit.'
+          : `The file has been split into ${numParts} parts successfully.`
+      )
+      .setTimestamp(),
 
   splittingFailedEmbed: new EmbedBuilder()
     .setColor(0xff0000)
@@ -112,12 +121,22 @@ module.exports = {
     .setTimestamp(),
 
   processingSuccessEmbed: new EmbedBuilder()
-    .setColor(0x00ff00) 
+    .setColor(0x00ff00)
     .setTitle(':white_check_mark: Meeting Processed Successfully')
-    .setDescription('The recording was transcribed and summarized successfully.')
+    .setDescription(
+      'The recording was transcribed and summarized successfully.'
+    )
     .addFields(
-      { name: ':scroll: Transcription',   value: ':white_check_mark: Completed', inline: true },
-      { name: ':page_facing_up: Summary', value: ':white_check_mark: Generated', inline: true }
+      {
+        name: ':scroll: Transcription',
+        value: ':white_check_mark: Completed',
+        inline: true,
+      },
+      {
+        name: ':page_facing_up: Summary',
+        value: ':white_check_mark: Generated',
+        inline: true,
+      }
     )
     .setTimestamp(),
 
@@ -132,11 +151,10 @@ module.exports = {
     .setTitle(':x: No Recordings Found')
     .setDescription('There are no recordings associated with this meeting.')
     .setTimestamp(),
-  
+
   processingFailedEmbed: new EmbedBuilder()
     .setColor(0xff0000)
     .setTitle(':x: Processing Failed')
     .setDescription('An error occurred while processing the meeting.')
     .setTimestamp(),
-
 };

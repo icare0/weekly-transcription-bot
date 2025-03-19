@@ -22,37 +22,37 @@ This project is a Discord bot designed to record, transcribe, and summarize week
 
 1. Clone the repository:
 
-    ```sh
-    git clone https://github.com/Solvro/weekly-transcription-bot.git
-    cd weekly-transcription-bot
-    ```
+   ```sh
+   git clone https://github.com/Solvro/weekly-transcription-bot.git
+   cd weekly-transcription-bot
+   ```
 
 2. Install the required packages:
 
-    ```sh
-    npm install
-    ```
+   ```sh
+   npm install
+   ```
 
 3. Create a [`.env`](.env.example) file in the root directory and add your credentials:
 
-    ```env
-    TOKEN=<your-discord-bot-token>
-    CLIENT_ID=<your-discord-app-client-id>
-    GUILD_ID=<your-guild-id>
-    OPENAI_API_KEY=<your-openai-api-key>
-    ```
+   ```env
+   TOKEN=<your-discord-bot-token>
+   CLIENT_ID=<your-discord-app-client-id>
+   GUILD_ID=<your-guild-id>
+   OPENAI_API_KEY=<your-openai-api-key>
+   ```
 
 4. Invite the bot:
 
-    ```sh
-    https://discord.com/oauth2/authorize?client_id=<your-discord-app-client-id>&permissions=3147776&scope=bot%20applications.commands
-    ```
+   ```sh
+   https://discord.com/oauth2/authorize?client_id=<your-discord-app-client-id>&permissions=3147776&scope=bot%20applications.commands
+   ```
 
 5. Start the bot:
 
-    ```sh
-    npm run start
-    ```
+   ```sh
+   npm run start
+   ```
 
 ### Docker
 
@@ -60,15 +60,15 @@ You can also run the bot using Docker.
 
 1. Build the Docker image:
 
-    ```sh
-    docker build -t weekly-transcription-bot .
-    ```
+   ```sh
+   docker build -t weekly-transcription-bot .
+   ```
 
 2. Run the Docker container:
 
-    ```sh
-    docker run -d --name weekly-transcription-bot --env-file .env weekly-transcription-bot
-    ```
+   ```sh
+   docker run -d --name weekly-transcription-bot --env-file .env weekly-transcription-bot
+   ```
 
 ## Configuration
 

@@ -8,7 +8,7 @@ const {
   splitAudioFile,
   transcribe,
   summarizeTranscription,
-  sendLongMessageToThread
+  sendLongMessageToThread,
 } = require('../../utils/utils.js');
 
 const {
@@ -26,7 +26,7 @@ const {
   summaryStartedEmbed,
   processingSuccessEmbed,
   processingFailedEmbed,
-  errorWhileRecordingEmbed
+  errorWhileRecordingEmbed,
 } = require('../../utils/embeds.js');
 
 const config = require('../../../config.json');
@@ -37,15 +37,23 @@ module.exports = {
   async execute(interaction) {
     await interaction.deferReply();
 
-    const memberRoles = interaction.member.roles.cache.map(role => role.name);
-    const hasPermission = memberRoles.some(role => config.allowed_roles.includes(role));
+    const memberRoles = interaction.member.roles.cache.map((role) => role.name);
+    const hasPermission = memberRoles.some((role) =>
+      config.allowed_roles.includes(role)
+    );
 
     if(!hasPermission)
-      return await interaction.editReply({ embeds: [noPermissionEmbed], ephemeral: true });
+      return await interaction.editReply({
+        embeds: [noPermissionEmbed],
+        ephemeral: true,
+      });
 
     await stateLock.acquire('recording', async () => {
       if(!state.recordingProcess || !state.connection)
-        return await interaction.editReply({ embeds: [noActiveRecordingEmbed], ephemeral: true });
+        return await interaction.editReply({
+          embeds: [noActiveRecordingEmbed],
+          ephemeral: true,
+        });
 
       try {
         console.log('Stopping connection and audio mixer...');
@@ -55,17 +63,26 @@ module.exports = {
         }
 
         if(state.audioMixer) {
-          state.audioMixer.end();
+          state.audioMixer.destroy();
           await waitForDrain(state.audioMixer);
         }
 
         if(state.recordingProcess) {
           console.log('Stopping recording process...');
           state.recordingProcess.stdin.end();
-          await new Promise(resolve => state.recordingProcess.once('close', resolve));
+          await new Promise((resolve) =>
+            state.recordingProcess.once('close', resolve)
+          );
         }
 
-        const meetingPath = path.join(__dirname, '..', '..', '..', 'meetings', state.currentMeeting);
+        const meetingPath = path.join(
+          __dirname,
+          '..',
+          '..',
+          '..',
+          'meetings',
+          state.currentMeeting
+        );
         const mp3Path = path.join(meetingPath, `${state.currentMeeting}.mp3`);
 
         console.log(`Checking if MP3 file exists at: ${mp3Path}`);
@@ -80,7 +97,7 @@ module.exports = {
           name: state.currentMeeting,
           recorded: true,
           transcribed: false,
-          summarized: false
+          summarized: false,
         });
 
         console.log('Sending recording stopped embed...');
@@ -96,9 +113,16 @@ module.exports = {
         let audioParts = [audioPath];
 
         try {
-          audioParts = await splitAudioFile(audioPath, config.transcription_max_size_MB);
-          console.log(`Audio splitting successful. Parts: ${audioParts.length}`);
-          await msg2.edit({ embeds: [splittingSuccessEmbed(audioParts.length)] });
+          audioParts = await splitAudioFile(
+            audioPath,
+            config.transcription_max_size_MB
+          );
+          console.log(
+            `Audio splitting successful. Parts: ${audioParts.length}`
+          );
+          await msg2.edit({
+            embeds: [splittingSuccessEmbed(audioParts.length)],
+          });
         } catch(err) {
           console.error('Error while splitting the file: ', err);
           await msg2.edit({ embeds: [splittingFailedEmbed] });
@@ -116,8 +140,13 @@ module.exports = {
         }
 
         console.log('Saving transcription to file...');
-        const transcriptionFile = path.join(meetingPath, `${state.currentMeeting}.txt`);
-        fs.writeFileSync(transcriptionFile, transcription, { encoding: 'utf8' });
+        const transcriptionFile = path.join(
+          meetingPath,
+          `${state.currentMeeting}.txt`
+        );
+        fs.writeFileSync(transcriptionFile, transcription, {
+          encoding: 'utf8',
+        });
         await msg3.edit({ embeds: [transcriptionCompletedEmbed] });
 
         console.log('Starting summary generation...');
@@ -131,14 +160,16 @@ module.exports = {
         }
 
         console.log('Saving summary to file...');
-        const summaryFile = path.join(meetingPath, `${state.currentMeeting}.md`);
+        const summaryFile = path.join(
+          meetingPath,
+          `${state.currentMeeting}.md`
+        );
         fs.writeFileSync(summaryFile, summary, { encoding: 'utf8' });
         await msg4.edit({ embeds: [summaryCompletedEmbed] });
 
         console.log('Sending summary to thread...');
         await sendLongMessageToThread(thread, summary);
         await interaction.editReply({ embeds: [processingSuccessEmbed] });
-
       } catch(error) {
         console.error('Stop command error:', error);
         await interaction.editReply({ embeds: [processingFailedEmbed] });
@@ -151,5 +182,5 @@ module.exports = {
         state.currentMeeting = null;
       }
     });
-  }
+  },
 };
