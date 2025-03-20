@@ -1,6 +1,7 @@
 const state = require('../../utils/state.js');
 const { noPermissionEmbed } = require('../../utils/embeds.js');
 const config = require('../../../config.json');
+const { MessageFlags } = require('discord.js');
 
 module.exports = {
   async execute(interaction) {
@@ -12,13 +13,13 @@ module.exports = {
     if(!hasPermission)
       return await interaction.reply({
         embeds: [noPermissionEmbed],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
 
     if(state.meetings.length === 0)
       return await interaction.reply({
         content: ':x: No meetings found',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
 
     await interaction.reply(':arrow_down: Meetings list');

@@ -2,6 +2,7 @@ const state = require('../../utils/state.js');
 const path = require('path');
 const fs = require('fs');
 const AsyncLock = require('async-lock');
+const { MessageFlags } = require('discord.js');
 
 const {
   waitForDrain,
@@ -45,14 +46,14 @@ module.exports = {
     if(!hasPermission)
       return await interaction.editReply({
         embeds: [noPermissionEmbed],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
 
     await stateLock.acquire('recording', async () => {
       if(!state.recordingProcess || !state.connection)
         return await interaction.editReply({
           embeds: [noActiveRecordingEmbed],
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
 
       try {

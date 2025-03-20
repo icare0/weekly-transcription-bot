@@ -3,6 +3,7 @@ const {
   EndBehaviorType,
   VoiceConnectionStatus,
 } = require('@discordjs/voice');
+const { MessageFlags } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const prism = require('prism-media');
@@ -28,7 +29,7 @@ const stateLock = new AsyncLock();
 
 module.exports = {
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: false });
+    await interaction.deferReply();
 
     const memberRoles = interaction.member.roles.cache.map((role) => role.name);
     const hasPermission = memberRoles.some((role) =>
@@ -38,14 +39,14 @@ module.exports = {
     if(!hasPermission)
       return await interaction.editReply({
         embeds: [noPermissionEmbed],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
 
     await stateLock.acquire('recording', async () => {
       if(state.currentMeeting)
         return await interaction.editReply({
           embeds: [recordingAlreadyStartedEmbed],
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
 
       const meetingName = interaction.options.getString('name');
@@ -53,14 +54,14 @@ module.exports = {
       if(state.meetings.map((m) => m.name).includes(meetingName))
         return await interaction.editReply({
           embeds: [meetingAlreadyExistsEmbed],
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
 
       const voiceChannel = interaction.member.voice.channel;
       if(!voiceChannel)
         return await interaction.editReply({
           embeds: [noVoiceChannelEmbed],
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
 
       try {
