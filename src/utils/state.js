@@ -5,5 +5,5 @@ module.exports = {
   meetings: null,
   currentMeeting: null,
   audioMixer: null,
-  cleanupRecording: null,
+  userStreams: null
 };

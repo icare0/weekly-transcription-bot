@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const state = require('../../utils/state.js');
+const { MessageFlags } = require('discord.js');
 const {
   noPermissionEmbed,
   fileDeletedEmbed,
@@ -33,7 +34,7 @@ module.exports = {
     if(!hasPermission)
       return await interaction.reply({
         embeds: [noPermissionEmbed],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
 
     await interaction.deferReply();
@@ -46,7 +47,7 @@ module.exports = {
     if(!fs.existsSync(meetingPath))
       return await interaction.editReply({
         embeds: [meetingDoesNotExistEmbed],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
 
     if(what === 'recording') {
@@ -58,7 +59,7 @@ module.exports = {
       if(audioFiles.length === 0)
         return await interaction.editReply({
           embeds: [noRecordingsExistEmbed],
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
 
       audioFiles.forEach((file) => fs.unlinkSync(path.join(meetingPath, file)));

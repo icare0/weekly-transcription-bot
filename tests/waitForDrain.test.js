@@ -1,28 +1,30 @@
-const { waitForDrain } = require('../src/utils/utils.js');
+const { waitForDrain } = require("../src/utils/utils.js");
 
-describe('waitForDrain', () => {
-  test('resolves when the stream drains', async () => {
-    const mockStream = {
-      writableLength: 100,
-      once: jest.fn((event, callback) => {
-        if (event === 'drain') {
+test('waitForDrain resolves when the stream drains', async () => {
+  const mockStream = {
+    writableLength: 10000,
+    once: jest.fn((event, callback) => {
+      if(event === 'drain') {
+        setTimeout(() => {
           mockStream.writableLength = 0;
           callback();
-        }
-      }),
-    };
+        }, 100);
+      }
+    }),
+  };
 
-    await waitForDrain(mockStream);
-    expect(mockStream.once).toHaveBeenCalledWith('drain', expect.any(Function));
-  });
+  await expect(waitForDrain(mockStream)).resolves.toBeUndefined();
 
-  test('resolves immediately if the stream is already drained', async () => {
-    const mockStream = {
-      writableLength: 0,
-      once: jest.fn(),
-    };
+  expect(mockStream.once).toHaveBeenCalledWith('drain', expect.any(Function));
+});
 
-    await waitForDrain(mockStream);
-    expect(mockStream.once).not.toHaveBeenCalled();
-  });
+test('waitForDrain handles already drained stream', async () => {
+  const mockStream = {
+    writableLength: 0,
+    once: jest.fn(),
+  };
+
+  await expect(waitForDrain(mockStream)).resolves.toBeUndefined();
+
+  expect(mockStream.once).not.toHaveBeenCalled();
 });
