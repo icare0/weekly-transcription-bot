@@ -9,9 +9,9 @@
     "lint:fix": "eslint . --fix"
   },
   "type": "commonjs",
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": ["discord", "bot", "transcription", "audio", "voice", "ai", "openai"],
+  "author": "jakubkobus",
+  "license": "MIT",
   "description": "",
   "dependencies": {
     "@discordjs/voice": "^0.18.0",
