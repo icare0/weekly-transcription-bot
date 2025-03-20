@@ -14,7 +14,7 @@ const { Mixer, Input } = require('audio-mixer');
 const state = require('../../utils/state.js');
 const config = require('../../../config.json');
 const AsyncLock = require('async-lock');
-const { waitForDrain } = require('../../utils/utils.js');
+const { cleanupRecording } = require('../../utils/utils.js');
 
 const {
   recordingStartedEmbed,
@@ -88,7 +88,7 @@ module.exports = {
         if(!fs.existsSync(meetingFolder))
           fs.mkdirSync(meetingFolder, { recursive: true });
 
-        const mp3Path = path.join(meetingFolder, `${state.currentMeeting}.mp3`);
+        const wavPath = path.join(meetingFolder, `${state.currentMeeting}.wav`);
 
         state.audioMixer = new Mixer({
           channels: 1,
@@ -98,46 +98,14 @@ module.exports = {
         });
 
         state.recordingProcess = spawn(ffmpeg, [
-          '-f',
-          's16le',
-          '-ar',
-          '48000',
-          '-ac',
-          '1',
-          '-i',
-          'pipe:0',
-          '-af',
-          'loudnorm',
-          '-codec:a',
-          'libmp3lame',
-          '-q:a',
-          '2',
+          '-f', 's16le',
+          '-ar', '48000',
+          '-ac', '1',
+          '-i', 'pipe:0',
+          '-af', 'loudnorm',
           '-y',
-          mp3Path,
+          wavPath,
         ]);
-
-        state.cleanupRecording = async () => {
-          if(state.audioMixer) {
-            state.audioMixer.destroy();
-            await waitForDrain(state.audioMixer);
-          }
-
-          if(state.recordingProcess) {
-            state.recordingProcess.stdin.end();
-            await new Promise((resolve) =>
-              state.recordingProcess.once('close', resolve)
-            );
-          }
-
-          for(const [, streamInfo] of userStreams) {
-            streamInfo.audioStream.destroy();
-            streamInfo.pcmStream.destroy();
-            streamInfo.opusDecoder.destroy();
-            state.audioMixer.removeInput(streamInfo.mixerInput);
-          }
-
-          userStreams.clear();
-        };
 
         state.recordingProcess.on('error', (err) => {
           console.error('Recording process error: ', err);
@@ -148,8 +116,8 @@ module.exports = {
 
         state.recordingProcess.on('close', async (code) => {
           state.finishedRecordingCode = code;
-          if(!fs.existsSync(mp3Path)) {
-            console.error('MP3 file does not exist');
+          if(!fs.existsSync(wavPath)) {
+            console.error('WAV file does not exist');
             fs.rmdirSync(meetingFolder, { recursive: true });
             await interaction.editReply({ embeds: [errorWhileRecordingEmbed] });
           } else {
@@ -160,10 +128,10 @@ module.exports = {
         state.audioMixer.pipe(state.recordingProcess.stdin);
 
         const receiver = state.connection.receiver;
-        const userStreams = new Map();
+        state.userStreams = new Map();
 
         receiver.speaking.on('start', (userId) => {
-          if(userStreams.has(userId)) return;
+          if(state.userStreams.has(userId)) return;
 
           const opusDecoder = new prism.opus.Decoder({
             rate: 48000,
@@ -191,7 +159,7 @@ module.exports = {
           pcmStream.pipe(mixerInput);
           state.audioMixer.addInput(mixerInput);
 
-          userStreams.set(userId, {
+          state.userStreams.set(userId, {
             audioStream,
             opusDecoder,
             pcmStream,
@@ -200,20 +168,20 @@ module.exports = {
         });
 
         receiver.speaking.on('end', (userId) => {
-          const streamInfo = userStreams.get(userId);
+          const streamInfo = state.userStreams.get(userId);
           if(streamInfo) {
             streamInfo.audioStream.destroy();
             streamInfo.opusDecoder.destroy();
             streamInfo.pcmStream.destroy();
             state.audioMixer.removeInput(streamInfo.mixerInput);
-            userStreams.delete(userId);
+            state.userStreams.delete(userId);
           }
         });
 
         state.connection.on('stateChange', (oldState, newState) => {
           if(newState.status === VoiceConnectionStatus.Disconnected) {
             console.error('Unexpected disconnection!');
-            state.cleanupRecording();
+            cleanupRecording(state.audioMixer, state.recordingProcess, state.userStreams);
             state.connection.destroy();
             state.connection = null;
           }

@@ -5,11 +5,11 @@ const AsyncLock = require('async-lock');
 const { MessageFlags } = require('discord.js');
 
 const {
-  waitForDrain,
   splitAudioFile,
   transcribe,
   summarizeTranscription,
   sendLongMessageToThread,
+  convertWavToMp3
 } = require('../../utils/utils.js');
 
 const {
@@ -28,6 +28,9 @@ const {
   processingSuccessEmbed,
   processingFailedEmbed,
   errorWhileRecordingEmbed,
+  convertingStartedEmbed,
+  convertingSuccessEmbed,
+  convertingFailedEmbed
 } = require('../../utils/embeds.js');
 
 const config = require('../../../config.json');
@@ -62,20 +65,7 @@ module.exports = {
           state.connection.destroy();
           state.connection = null;
         }
-
-        if(state.audioMixer) {
-          state.audioMixer.destroy();
-          await waitForDrain(state.audioMixer);
-        }
-
-        if(state.recordingProcess) {
-          console.log('Stopping recording process...');
-          state.recordingProcess.stdin.end();
-          await new Promise((resolve) =>
-            state.recordingProcess.once('close', resolve)
-          );
-        }
-
+      
         const meetingPath = path.join(
           __dirname,
           '..',
@@ -84,15 +74,17 @@ module.exports = {
           'meetings',
           state.currentMeeting
         );
-        const mp3Path = path.join(meetingPath, `${state.currentMeeting}.mp3`);
 
-        console.log(`Checking if MP3 file exists at: ${mp3Path}`);
-        if(!fs.existsSync(mp3Path)) {
-          console.error('MP3 file not found!');
+        const wavPath = path.join(meetingPath, `${state.currentMeeting}.wav`);
+        const mp3Path = path.join(meetingPath, `${state.currentMeeting}.mp3`);
+      
+        console.log(`Checking if WAV file exists at: ${wavPath}`);
+        if(!fs.existsSync(wavPath)) {
+          console.error('WAV file not found!');
           await interaction.editReply({ embeds: [errorWhileRecordingEmbed] });
           return;
         }
-
+      
         console.log('Updating meeting state...');
         state.meetings.push({
           name: state.currentMeeting,
@@ -100,74 +92,96 @@ module.exports = {
           transcribed: false,
           summarized: false,
         });
-
+      
         console.log('Sending recording stopped embed...');
         await interaction.editReply({ embeds: [recordingStoppedEmbed] });
         const message = await interaction.fetchReply();
         const thread = await message.startThread({
           name: `Summary of the meeting '${state.currentMeeting}'`,
         });
-
+      
+        let audioFilePath = wavPath;
+      
+        console.log('Converting WAV to MP3...');
+        const msg1 = await thread.send({ embeds: [convertingStartedEmbed] });
+        try {
+          await convertWavToMp3(wavPath, mp3Path);
+          await msg1.edit({ embeds: [convertingSuccessEmbed] });
+          audioFilePath = mp3Path;
+        } catch(err) {
+          console.error('Error converting WAV to MP3: ', err);
+          await msg1.edit({ embeds: [convertingFailedEmbed] });
+          console.log('Falling back to WAV file for transcription.');
+        }
+      
+        let audioParts = [audioFilePath];
+      
         console.log('Starting audio splitting...');
         const msg2 = await thread.send({ embeds: [splittingStartedEmbed] });
-        let audioPath = mp3Path;
-        let audioParts = [audioPath];
-
         try {
-          audioParts = await splitAudioFile(
-            audioPath,
-            config.transcription_max_size_MB
-          );
-          console.log(
-            `Audio splitting successful. Parts: ${audioParts.length}`
-          );
+          audioParts = await splitAudioFile(audioFilePath, config.transcription_max_size_MB);
+          console.log(`Audio splitting successful. Parts: ${audioParts.length}`);
           await msg2.edit({
             embeds: [splittingSuccessEmbed(audioParts.length)],
           });
         } catch(err) {
           console.error('Error while splitting the file: ', err);
           await msg2.edit({ embeds: [splittingFailedEmbed] });
-          throw err;
+      
+          audioParts = [audioFilePath];
+          console.log('Falling back to the original file for transcription.');
         }
-
+      
         console.log('Starting transcription...');
         const msg3 = await thread.send({ embeds: [transcriptionStartedEmbed] });
-        const transcription = await transcribe(audioParts);
-
-        if(!transcription) {
-          console.error('Transcription failed!');
+        let transcription, transcriptionFile;
+        try {
+          transcription = await transcribe(audioParts);
+          if(!transcription) {
+            console.error('Transcription failed!');
+            await msg3.edit({ embeds: [transcriptionFailedEmbed] });
+            throw new Error('Transcription failed');
+          }
+      
+          console.log('Saving transcription to file...');
+          transcriptionFile = path.join(
+            meetingPath,
+            `${state.currentMeeting}.txt`
+          );
+          fs.writeFileSync(transcriptionFile, transcription, {
+            encoding: 'utf8',
+          });
+          await msg3.edit({ embeds: [transcriptionCompletedEmbed] });
+        } catch(err) {
+          console.error('Error during transcription: ', err);
           await msg3.edit({ embeds: [transcriptionFailedEmbed] });
           throw new Error('Transcription failed');
         }
-
-        console.log('Saving transcription to file...');
-        const transcriptionFile = path.join(
-          meetingPath,
-          `${state.currentMeeting}.txt`
-        );
-        fs.writeFileSync(transcriptionFile, transcription, {
-          encoding: 'utf8',
-        });
-        await msg3.edit({ embeds: [transcriptionCompletedEmbed] });
-
+      
         console.log('Starting summary generation...');
         const msg4 = await thread.send({ embeds: [summaryStartedEmbed] });
-        const summary = await summarizeTranscription(transcriptionFile, msg4);
-
-        if(!summary) {
-          console.error('Summary generation failed!');
+        let summary;
+        try {
+          summary = await summarizeTranscription(transcriptionFile, msg4);
+          if(!summary) {
+            console.error('Summary generation failed!');
+            await msg4.edit({ embeds: [summaryFailedEmbed] });
+            throw new Error('Summary failed');
+          }
+      
+          console.log('Saving summary to file...');
+          const summaryFile = path.join(
+            meetingPath,
+            `${state.currentMeeting}.md`
+          );
+          fs.writeFileSync(summaryFile, summary, { encoding: 'utf8' });
+          await msg4.edit({ embeds: [summaryCompletedEmbed] });
+        } catch(err) {
+          console.error('Error during summary generation: ', err);
           await msg4.edit({ embeds: [summaryFailedEmbed] });
           throw new Error('Summary failed');
         }
-
-        console.log('Saving summary to file...');
-        const summaryFile = path.join(
-          meetingPath,
-          `${state.currentMeeting}.md`
-        );
-        fs.writeFileSync(summaryFile, summary, { encoding: 'utf8' });
-        await msg4.edit({ embeds: [summaryCompletedEmbed] });
-
+      
         console.log('Sending summary to thread...');
         await sendLongMessageToThread(thread, summary);
         await interaction.editReply({ embeds: [processingSuccessEmbed] });

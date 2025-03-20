@@ -157,4 +157,22 @@ module.exports = {
     .setTitle(':x: Processing Failed')
     .setDescription('An error occurred while processing the meeting.')
     .setTimestamp(),
+
+  convertingStartedEmbed: new EmbedBuilder()
+    .setColor(0x3498db)
+    .setTitle(':arrows_counterclockwise: Converting WAV to MP3')
+    .setDescription('Converting the WAV file to MP3 format.')
+    .setTimestamp(),
+
+  convertingSuccessEmbed: new EmbedBuilder()
+    .setColor(0x00ff00)
+    .setTitle(':white_check_mark: Conversion Complete')
+    .setDescription('The WAV file has been successfully converted to MP3 format.')
+    .setTimestamp(),
+  
+  convertingFailedEmbed: new EmbedBuilder()
+    .setColor(0xff0000)
+    .setTitle(':x: Conversion Failed')
+    .setDescription('An error occurred while converting the WAV file to MP3 format.')
+    .setTimestamp(),
 };
