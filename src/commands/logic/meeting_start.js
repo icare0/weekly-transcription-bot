@@ -26,6 +26,7 @@ const {
 } = require('../../utils/embeds.js');
 
 const stateLock = new AsyncLock();
+const DISCONNECTED_STATES = [VoiceConnectionStatus.Disconnected, VoiceConnectionStatus.Destroyed];
 
 module.exports = {
   async execute(interaction) {
@@ -179,7 +180,7 @@ module.exports = {
         });
 
         state.connection.on('stateChange', (oldState, newState) => {
-          if(newState.status === VoiceConnectionStatus.Disconnected) {
+          if(DISCONNECTED_STATES.includes(newState.status) && !DISCONNECTED_STATES.includes(oldState.status)) {
             console.error('Unexpected disconnection!');
             cleanupRecording(state.audioMixer, state.recordingProcess, state.userStreams);
             state.connection.destroy();
