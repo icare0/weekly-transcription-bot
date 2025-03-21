@@ -183,7 +183,7 @@ module.exports = {
           if(DISCONNECTED_STATES.includes(newState.status) && !DISCONNECTED_STATES.includes(oldState.status)) {
             console.error('Unexpected disconnection!');
             cleanupRecording(state.audioMixer, state.recordingProcess, state.userStreams);
-            state.connection.destroy();
+            if(newState.status !== VoiceConnectionStatus.Destroyed) state.connection.destroy();
             state.connection = null;
           }
         });
