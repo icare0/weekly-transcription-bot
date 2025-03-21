@@ -58,6 +58,7 @@ module.exports = {
   cleanupRecording: async (audioMixer, recordingProcess, userStreams) => {
     if(audioMixer) {
       audioMixer.destroy();
+      audioMixer.close();
       await waitForDrain(audioMixer);
     }
 
