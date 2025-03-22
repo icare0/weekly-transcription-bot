@@ -1,16 +1,9 @@
 const fs = require('fs');
 const path = require('path');
-const state = require('../../utils/state.js');
 const { MessageFlags } = require('discord.js');
-const {
-  noPermissionEmbed,
-  fileDeletedEmbed,
-  meetingDeletedEmbed,
-  noRecordingsExistEmbed,
-  meetingDoesNotExistEmbed,
-} = require('../../utils/embeds.js');
-
-const config = require('../../../config.json');
+const state = require('../../utils/state');
+const embeds = require('../../utils/embeds');
+const config = require('config');
 
 module.exports = {
   async autocomplete(interaction) {
@@ -28,12 +21,12 @@ module.exports = {
   async execute(interaction) {
     const memberRoles = interaction.member.roles.cache.map((role) => role.name);
     const hasPermission = memberRoles.some((role) =>
-      config.allowed_roles.includes(role)
+      config.get('allowed_roles').includes(role)
     );
 
     if(!hasPermission)
       return await interaction.reply({
-        embeds: [noPermissionEmbed],
+        embeds: [embeds.noPermissionEmbed],
         flags: MessageFlags.Ephemeral,
       });
 
@@ -46,19 +39,19 @@ module.exports = {
 
     if(!fs.existsSync(meetingPath))
       return await interaction.editReply({
-        embeds: [meetingDoesNotExistEmbed],
+        embeds: [embeds.meetingDoesNotExistEmbed],
         flags: MessageFlags.Ephemeral,
       });
 
     if(what === 'recording') {
       const files = fs.readdirSync(meetingPath);
       const audioFiles = files.filter(
-        (file) => file.endsWith('.wav') || file.endsWith('.mp3')
+        (file) => file.endsWith('.ogg') || file.endsWith('.mp3')
       );
 
       if(audioFiles.length === 0)
         return await interaction.editReply({
-          embeds: [noRecordingsExistEmbed],
+          embeds: [embeds.noRecordingsExistEmbed],
           flags: MessageFlags.Ephemeral,
         });
 
@@ -69,13 +62,13 @@ module.exports = {
       );
       if(meeting) meeting.recorded = false;
 
-      await interaction.editReply({ embeds: [fileDeletedEmbed] });
+      await interaction.editReply({ embeds: [embeds.fileDeletedEmbed] });
     } else {
       fs.rmSync(meetingPath, { recursive: true, force: true });
       state.meetings = state.meetings.filter(
         (meeting) => meeting.name !== meetingName
       );
-      await interaction.editReply({ embeds: [meetingDeletedEmbed] });
+      await interaction.editReply({ embeds: [embeds.meetingDeletedEmbed] });
     }
   },
 };

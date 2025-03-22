@@ -20,8 +20,8 @@ logs/
 meetings/
 *.mp3
 !test.mp3
-.wav
-!test.wav
+.ogg
+!test.ogg
 dist/
 build/
 out/

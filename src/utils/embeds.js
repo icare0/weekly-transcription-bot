@@ -1,11 +1,12 @@
 const { EmbedBuilder } = require('discord.js');
 
 module.exports = {
-  recordingStartedEmbed: new EmbedBuilder()
-    .setColor(0x3498db)
-    .setTitle(':red_circle: Recording Started')
-    .setDescription('The meeting recording has started successfully.')
-    .setTimestamp(),
+  recordingStartedEmbed: (meetingName) =>
+    new EmbedBuilder()
+      .setColor(0x3498db)
+      .setTitle(':red_circle: Recording Started')
+      .setDescription(`The meeting recording for '${meetingName}' has started successfully.`)
+      .setTimestamp(),
 
   recordingStoppedEmbed: new EmbedBuilder()
     .setColor(0x3498db)
@@ -151,28 +152,54 @@ module.exports = {
     .setTitle(':x: No Recordings Found')
     .setDescription('There are no recordings associated with this meeting.')
     .setTimestamp(),
-
-  processingFailedEmbed: new EmbedBuilder()
-    .setColor(0xff0000)
-    .setTitle(':x: Processing Failed')
-    .setDescription('An error occurred while processing the meeting.')
-    .setTimestamp(),
+    
+  processingFailedEmbed: (error) =>
+    new EmbedBuilder()
+      .setColor(0xff0000)
+      .setTitle(':x: Processing Failed')
+      .setDescription('An error occurred while processing the meeting.')
+      .addField('Error:', error)
+      .setTimestamp(),
 
   convertingStartedEmbed: new EmbedBuilder()
     .setColor(0x3498db)
-    .setTitle(':arrows_counterclockwise: Converting WAV to MP3')
-    .setDescription('Converting the WAV file to MP3 format.')
+    .setTitle(':arrows_counterclockwise: Converting OGG to MP3')
+    .setDescription('Converting the OGG file to MP3 format.')
     .setTimestamp(),
 
   convertingSuccessEmbed: new EmbedBuilder()
     .setColor(0x00ff00)
     .setTitle(':white_check_mark: Conversion Complete')
-    .setDescription('The WAV file has been successfully converted to MP3 format.')
+    .setDescription('The OGG file has been successfully converted to MP3 format.')
     .setTimestamp(),
   
   convertingFailedEmbed: new EmbedBuilder()
     .setColor(0xff0000)
     .setTitle(':x: Conversion Failed')
-    .setDescription('An error occurred while converting the WAV file to MP3 format.')
+    .setDescription('An error occurred while converting the OGG file to MP3 format.')
+    .setTimestamp(),
+
+  threadEmbed: new EmbedBuilder()
+    .setColor(0xff0000)
+    .setTitle(':x: Command Not Allowed')
+    .setDescription('This command cannot be used in a thread.')
+    .setTimestamp(),
+  
+  processingAudioEmbed: new EmbedBuilder()
+    .setColor(0x3498db)
+    .setTitle(':arrows_counterclockwise: Processing Audio')
+    .setDescription('The audio is being processed.')
+    .setTimestamp(),
+
+  noTranscriptionExistEmbed: new EmbedBuilder()
+    .setColor(0xff0000)
+    .setTitle(':x: No Transcription Found')
+    .setDescription('There is no transcription associated with this meeting.')
+    .setTimestamp(),
+
+  noSummaryExistEmbed: new EmbedBuilder()
+    .setColor(0xff0000)
+    .setTitle(':x: No Summary Found')
+    .setDescription('There is no summary associated with this meeting.')
     .setTimestamp(),
 };
