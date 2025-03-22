@@ -1,9 +1,9 @@
 module.exports = {
+  currentMeeting: null,
   connection: null,
   recordingProcess: null,
-  finishedRecordingCode: null,
+  mixingInterval: null,
+  userBuffers: null,
+  userStreams: null,
   meetings: null,
-  currentMeeting: null,
-  audioMixer: null,
-  userStreams: null
 };

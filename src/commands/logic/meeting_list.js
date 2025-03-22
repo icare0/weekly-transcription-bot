@@ -1,13 +1,13 @@
-const state = require('../../utils/state.js');
-const { noPermissionEmbed } = require('../../utils/embeds.js');
-const config = require('../../../config.json');
+const state = require('../../utils/state');
+const { noPermissionEmbed } = require('../../utils/embeds');
+const config = require('config');
 const { MessageFlags } = require('discord.js');
 
 module.exports = {
   async execute(interaction) {
     const memberRoles = interaction.member.roles.cache.map((role) => role.name);
     const hasPermission = memberRoles.some((role) =>
-      config.allowed_roles.includes(role)
+      config.get('allowed_roles').includes(role)
     );
 
     if(!hasPermission)

@@ -3,8 +3,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const ffmpeg = require('ffmpeg-static');
 const OpenAI = require('openai');
-
-const config = require('../../config.json');
+const config = require('config');
 const state = require('./state');
 
 const getAudioDuration = async (filePath) => {
@@ -40,54 +39,71 @@ const getAudioDuration = async (filePath) => {
   });
 };
 
-const waitForDrain = async (stream) => {
-  return new Promise((resolve) => {
-    if(stream.writableLength > 0) {
-      const check = () => {
-        if(stream.writableLength === 0) resolve();
-        else stream.once('drain', check);
-      };
-      check();
-    } else {
-      resolve();
-    }
-  });
-};
-
 module.exports = {
-  cleanupRecording: async (audioMixer, recordingProcess, userStreams) => {
-    if(audioMixer) {
-      audioMixer.destroy();
-      audioMixer.close();
-      await waitForDrain(audioMixer);
+  async cleanupRecording() {
+    if(state.mixingInterval) {
+      clearInterval(state.mixingInterval);
+      state.mixingInterval = null;
     }
-
-    if(recordingProcess) {
-      recordingProcess.stdin.end();
-      await new Promise((resolve) =>
-        recordingProcess.once('close', resolve)
-      );
-    }
-
-    for(const [, streamInfo] of userStreams) {
-      streamInfo.audioStream.destroy();
-      streamInfo.pcmStream.destroy();
-      streamInfo.opusDecoder.destroy();
-      if(audioMixer) {
-        audioMixer.removeInput(streamInfo.mixerInput);
+  
+    if(state.userBuffers && state.recordingProcess) {
+      const chunkSize = 48000 * 2 * (20 / 1000);
+      const mixedBuffer = Buffer.alloc(chunkSize);
+      const mixedSamples = new Int16Array(mixedBuffer.buffer, mixedBuffer.byteOffset, chunkSize / 2);
+      mixedSamples.fill(0);
+  
+      for(const [, user] of state.userBuffers) {
+        const available = user.buffer.length - user.position;
+        if(available > 0) {
+          const chunk = user.buffer.subarray(user.position, user.position + available);
+          const userSamples = new Int16Array(chunk.buffer, chunk.byteOffset, chunk.length / 2);
+          for(let i = 0; i < userSamples.length; i++) {
+            const sum = mixedSamples[i] + userSamples[i];
+            mixedSamples[i] = Math.max(-32768, Math.min(32767, sum));
+          }
+        }
       }
+  
+      if(!state.recordingProcess.stdin.destroyed) 
+        state.recordingProcess.stdin.write(mixedBuffer);
     }
-
-    userStreams.clear();
-    state.userStreams = null;
-    state.recordingProcess = null;
-    state.audioMixer = null;
+  
+    if(state.recordingProcess) {
+      if(!state.recordingProcess.stdin.destroyed)
+        state.recordingProcess.stdin.end();
+  
+      await new Promise((resolve) => {
+        state.recordingProcess.on('close', resolve);
+      });
+  
+      state.recordingProcess = null;
+    }
+  
+    if(state.userStreams) {
+      for(const [, streamInfo] of state.userStreams) {
+        if(streamInfo.audioStream) streamInfo.audioStream.destroy();
+        if(streamInfo.opusDecoder) streamInfo.opusDecoder.destroy();
+        if(streamInfo.pcmStream) streamInfo.pcmStream.destroy();
+      }
+      state.userStreams.clear();
+      state.userStreams = null;
+    }
+  
+    if(state.userBuffers) {
+      state.userBuffers.clear();
+      state.userBuffers = null;
+    }
+  
+    if(state.connection) {
+      state.connection.destroy();
+      state.connection = null;
+    }
   },
 
-  convertWavToMp3: async (wavPath, mp3Path) => {
+  convertOggToMp3: async (oggPath, mp3Path) => {
     return new Promise((resolve, reject) => {
       const ffmpegProcess = spawn(ffmpeg, [
-        '-i', wavPath,
+        '-i', oggPath,
         '-codec:a', 'libmp3lame',
         '-q:a', '2',
         '-y',
@@ -96,10 +112,10 @@ module.exports = {
 
       ffmpegProcess.on('close', (code) => {
         if(code === 0) {
-          console.log('WAV to MP3 conversion complete.');
+          console.log('OGG to MP3 conversion complete.');
           resolve();
         } else {
-          console.error('WAV to MP3 conversion failed!');
+          console.error('OGG to MP3 conversion failed!');
           reject(new Error('FFmpeg conversion failed'));
         }
       });
@@ -115,8 +131,8 @@ module.exports = {
     const maxFileSize_Bytes = maxFileSize_MB * 1024 * 1024;
     const fileExtension = path.extname(filePath).toLowerCase();
   
-    if(!['.mp3', '.wav'].includes(fileExtension))
-      throw new Error('Unsupported file format. Only MP3 and WAV files are supported.');
+    if(fileExtension !== '.mp3')
+      throw new Error('Unsupported file format. Only MP3 files are supported.');
   
     if(!fs.existsSync(filePath))
       throw new Error('File does not exist.');
@@ -181,12 +197,12 @@ module.exports = {
       for(const filePath of audioParts) {
         const transcription = await openai.audio.transcriptions.create({
           file: fs.createReadStream(filePath),
-          model: config.transcription_model,
-          language: config.transcription_language,
+          model: config.get('openai.transcription_model'),
+          language: config.get('openai.transcription_language'),
         });
 
         fullTranscription += transcription.text + ' ';
-        fs.unlinkSync(filePath);
+        if(audioParts.length > 1) fs.unlinkSync(filePath);
       }
 
       return fullTranscription.trim();
@@ -196,19 +212,19 @@ module.exports = {
     }
   },
 
-  summarizeTranscription: async (transcriptionPath) => {
+  summarize: async (transcriptionPath) => {
     try {
       const transcription = fs.readFileSync(transcriptionPath, 'utf-8');
 
       const messages = [
-        { role: 'system', content: config.system_content.join('') },
-        { role: 'user', content: `${config.user_content}${transcription}` },
+        { role: 'system', content: config.get('openai.system_content').join('') },
+        { role: 'user', content: `${config.get('openai.user_content')}${transcription}` },
       ];
 
       const openai = new OpenAI(process.env.OPENAI_API_KEY);
 
       const response = await openai.chat.completions.create({
-        model: config.summary_model,
+        model: config.get('openai.summary_model'),
         messages: messages,
       });
 
@@ -219,7 +235,7 @@ module.exports = {
     }
   },
 
-  sendLongMessageToThread: async (thread, message) => {
+  sendSummary: async (message, thread) => {
     const lines = message.split('\n');
     let messageChunk = '';
 
@@ -236,6 +252,4 @@ module.exports = {
       await thread.send(messageChunk);
     }
   },
-
-  waitForDrain,
 };

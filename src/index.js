@@ -88,7 +88,7 @@ state.meetings = directories.map((dir) => {
   return {
     name: dir,
     recorded: meetingFiles.some(
-      (file) => file.endsWith('.mp3') || file.endsWith('.wav')
+      (file) => file.endsWith('.mp3') || file.endsWith('.ogg')
     ),
     transcribed: meetingFiles.some((file) => file.endsWith('.txt')),
     summarized: meetingFiles.some((file) => file.endsWith('.md')),

@@ -44,6 +44,29 @@ module.exports = {
             .setRequired(true)
             .setAutocomplete(true)
         )
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName('send')
+        .setDescription('Sends a recording, summary or transcription of the meeting')
+        .addStringOption((option) =>
+          option
+            .setName('what')
+            .setDescription('What to send')
+            .setRequired(true)
+            .addChoices(
+              { name: 'recording', value: 'recording' },
+              { name: 'summary', value: 'summary' },
+              { name: 'transcription', value: 'transcription' }
+            )
+        )
+        .addStringOption((option) =>
+          option
+            .setName('name')
+            .setDescription('Name of the meeting')
+            .setRequired(true)
+            .setAutocomplete(true)
+        )
     ),
 
   async autocomplete(interaction) {
