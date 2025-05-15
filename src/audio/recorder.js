@@ -49,6 +49,11 @@ class AudioRecorder {
     this.currentMeeting = null;
     this.recordingTimeout = null;
     this.oggPath = null;
+    this.participantsData = null;
+    this.eventsTimeline = null;
+    this.metadataPath = null;
+    this.speakingStates = new Map();
+    this.client = null;
   }
 
   /**
@@ -63,6 +68,9 @@ class AudioRecorder {
       // Valider le nom de la réunion
       validateMeetingName(meetingName);
       
+      // Sauvegarder une référence au client Discord
+      this.client = interaction.client;
+      
       // Créer le dossier pour la réunion
       const MEETINGS_DIR = path.join(__dirname, '../../meetings/');
       if (!fs.existsSync(MEETINGS_DIR)) {
@@ -76,6 +84,16 @@ class AudioRecorder {
       
       // Définir le chemin du fichier OGG
       this.oggPath = path.join(meetingFolder, safeFileName(meetingName, '.ogg'));
+      
+      // Définir le chemin du fichier metadata JSON
+      this.metadataPath = path.join(meetingFolder, safeFileName(meetingName, '.json'));
+      
+      // Initialiser les structures de données pour les participants et la timeline
+      this.participantsData = new Map();
+      this.eventsTimeline = [];
+      
+      // Ajouter les membres actuels du canal vocal comme participants initiaux
+      this.initializeParticipants(voiceChannel);
       
       // Rejoindre le canal vocal
       this.connection = djsv.joinVoiceChannel({
@@ -94,6 +112,9 @@ class AudioRecorder {
           this.stopRecording();
         }
       });
+      
+      // Configurer les événements du canal vocal pour suivre les entrées/sorties
+      this.setupVoiceStateTracking(voiceChannel);
       
       // Définir le nom de la réunion actuelle
       this.currentMeeting = meetingName;
@@ -155,6 +176,155 @@ class AudioRecorder {
   }
 
   /**
+   * Initialize participants data from voice channel
+   * @param {Object} voiceChannel Voice channel
+   */
+  initializeParticipants(voiceChannel) {
+    // Get all members in the voice channel
+    voiceChannel.members.forEach(member => {
+      if (!member.user.bot) {
+        const userData = {
+          id: member.id,
+          username: member.user.username,
+          displayName: member.displayName,
+          avatarURL: member.user.displayAvatarURL({ format: 'png', size: 128 }),
+          joinTime: Date.now(),
+          leaveTime: null,
+          isMuted: member.voice.mute || member.voice.selfMute,
+          isDeafened: member.voice.deaf || member.voice.selfDeaf,
+          speakingTimes: [],
+          totalSpeakingTime: 0
+        };
+        
+        this.participantsData.set(member.id, userData);
+        
+        // Add a join event to timeline (at start of recording)
+        this.eventsTimeline.push({
+          type: 'join',
+          userId: member.id,
+          username: member.user.username,
+          displayName: member.displayName,
+          timestamp: Date.now(),
+          recordingTimestamp: 0 // Start of recording
+        });
+      }
+    });
+  }
+
+  /**
+   * Set up voice state tracking for user joins and leaves
+   * @param {Object} voiceChannel Voice channel to track
+   */
+  setupVoiceStateTracking(voiceChannel) {
+    if (!this.client) {
+      logger.warn('Cannot setup voice state tracking: client not available');
+      return;
+    }
+    
+    // Listen for voice state updates
+    this.client.on('voiceStateUpdate', (oldState, newState) => {
+      // Skip bot events
+      if (oldState.member.user.bot || newState.member.user.bot) return;
+      
+      const userId = oldState.id || newState.id;
+      const now = Date.now();
+      const recordingTime = (now - (this.participantsData.get(this.participantsData.keys().next().value)?.joinTime || now)) / 1000;
+      
+      // User joined the voice channel
+      if (oldState.channelId !== voiceChannel.id && newState.channelId === voiceChannel.id) {
+        const userData = {
+          id: userId,
+          username: newState.member.user.username,
+          displayName: newState.member.displayName,
+          avatarURL: newState.member.user.displayAvatarURL({ format: 'png', size: 128 }),
+          joinTime: now,
+          leaveTime: null,
+          isMuted: newState.mute || newState.selfMute,
+          isDeafened: newState.deaf || newState.selfDeaf,
+          speakingTimes: [],
+          totalSpeakingTime: 0
+        };
+        
+        this.participantsData.set(userId, userData);
+        
+        // Add join event to timeline
+        this.eventsTimeline.push({
+          type: 'join',
+          userId: userId,
+          username: newState.member.user.username,
+          displayName: newState.member.displayName,
+          timestamp: now,
+          recordingTimestamp: recordingTime
+        });
+        
+        logger.info(`User ${newState.member.user.username} joined the voice channel`);
+      }
+      
+      // User left the voice channel
+      else if (oldState.channelId === voiceChannel.id && newState.channelId !== voiceChannel.id) {
+        const userData = this.participantsData.get(userId);
+        
+        if (userData) {
+          userData.leaveTime = now;
+          
+          // Add leave event to timeline
+          this.eventsTimeline.push({
+            type: 'leave',
+            userId: userId,
+            username: oldState.member.user.username,
+            displayName: oldState.member.displayName,
+            timestamp: now,
+            recordingTimestamp: recordingTime
+          });
+          
+          logger.info(`User ${oldState.member.user.username} left the voice channel`);
+        }
+      }
+      
+      // User muted/unmuted or deafened/undeafened
+      else if (oldState.channelId === voiceChannel.id && newState.channelId === voiceChannel.id) {
+        const userData = this.participantsData.get(userId);
+        
+        if (userData) {
+          // Mute status changed
+          if (oldState.mute !== newState.mute || oldState.selfMute !== newState.selfMute) {
+            const isMuted = newState.mute || newState.selfMute;
+            userData.isMuted = isMuted;
+            
+            this.eventsTimeline.push({
+              type: isMuted ? 'mute' : 'unmute',
+              userId: userId,
+              username: newState.member.user.username,
+              displayName: newState.member.displayName,
+              timestamp: now,
+              recordingTimestamp: recordingTime
+            });
+            
+            logger.info(`User ${newState.member.user.username} ${isMuted ? 'muted' : 'unmuted'}`);
+          }
+          
+          // Deafen status changed
+          if (oldState.deaf !== newState.deaf || oldState.selfDeaf !== newState.selfDeaf) {
+            const isDeafened = newState.deaf || newState.selfDeaf;
+            userData.isDeafened = isDeafened;
+            
+            this.eventsTimeline.push({
+              type: isDeafened ? 'deafen' : 'undeafen',
+              userId: userId,
+              username: newState.member.user.username,
+              displayName: newState.member.displayName,
+              timestamp: now,
+              recordingTimestamp: recordingTime
+            });
+            
+            logger.info(`User ${newState.member.user.username} ${isDeafened ? 'deafened' : 'undeafened'}`);
+          }
+        }
+      }
+    });
+  }
+
+  /**
    * Configure l'intervalle de mixage audio
    */
   setupMixingInterval() {
@@ -165,7 +335,7 @@ class AudioRecorder {
       if (users.length === 0) return;
       
       const userChunks = [];
-      for (const [, user] of users) {
+      for (const [userId, user] of users) {
         const available = user.buffer.length - user.position;
         const bytesToRead = Math.min(available, chunkSize);
         let chunk;
@@ -221,10 +391,42 @@ class AudioRecorder {
     
     const receiver = this.connection.receiver;
     this.userStreams = new Map();
+    this.speakingStates = new Map();
     
     // Événement quand un utilisateur commence à parler
     receiver.speaking.on('start', (userId) => {
       if (this.userStreams.has(userId)) return;
+      
+      const now = Date.now();
+      const recordingTime = (now - (this.participantsData.get(this.participantsData.keys().next().value)?.joinTime || now)) / 1000;
+      
+      // Update speaking state
+      this.speakingStates.set(userId, {
+        speaking: true,
+        startTime: now,
+        recordingStartTime: recordingTime
+      });
+      
+      // Add to the timeline
+      this.eventsTimeline.push({
+        type: 'startSpeaking',
+        userId: userId,
+        username: this.getUsernameById(userId),
+        displayName: this.getDisplayNameById(userId),
+        timestamp: now,
+        recordingTimestamp: recordingTime
+      });
+      
+      // Update participant data
+      const userData = this.participantsData.get(userId);
+      if (userData) {
+        userData.speakingTimes.push({
+          start: now,
+          startRecording: recordingTime,
+          end: null,
+          endRecording: null
+        });
+      }
       
       const opusDecoder = new prism.opus.Decoder({
         rate: AUDIO_SETTINGS.rate,
@@ -264,6 +466,8 @@ class AudioRecorder {
         opusDecoder,
         pcmStream,
       });
+      
+      logger.info(`User ${this.getUsernameById(userId)} started speaking`);
     });
     
     // Événement quand un utilisateur arrête de parler
@@ -276,7 +480,97 @@ class AudioRecorder {
         this.userBuffers.delete(userId);
         this.userStreams.delete(userId);
       }
+      
+      const now = Date.now();
+      const recordingTime = (now - (this.participantsData.get(this.participantsData.keys().next().value)?.joinTime || now)) / 1000;
+      
+      // Update speaking state
+      const speakingState = this.speakingStates.get(userId);
+      if (speakingState && speakingState.speaking) {
+        speakingState.speaking = false;
+        speakingState.endTime = now;
+        speakingState.recordingEndTime = recordingTime;
+        
+        // Calculate speaking duration
+        const duration = (now - speakingState.startTime) / 1000; // in seconds
+        
+        // Add to the timeline
+        this.eventsTimeline.push({
+          type: 'stopSpeaking',
+          userId: userId,
+          username: this.getUsernameById(userId),
+          displayName: this.getDisplayNameById(userId),
+          timestamp: now,
+          recordingTimestamp: recordingTime,
+          duration: duration
+        });
+        
+        // Update participant data
+        const userData = this.participantsData.get(userId);
+        if (userData && userData.speakingTimes.length > 0) {
+          const lastSpeakingTime = userData.speakingTimes[userData.speakingTimes.length - 1];
+          if (!lastSpeakingTime.end) {
+            lastSpeakingTime.end = now;
+            lastSpeakingTime.endRecording = recordingTime;
+            
+            const speakingDuration = (now - lastSpeakingTime.start) / 1000;
+            userData.totalSpeakingTime += speakingDuration;
+          }
+        }
+        
+        logger.info(`User ${this.getUsernameById(userId)} stopped speaking (duration: ${duration.toFixed(1)}s)`);
+      }
     });
+  }
+
+  /**
+   * Get username by user ID
+   * @param {string} userId Discord user ID
+   * @returns {string} Username or "Unknown User"
+   */
+  getUsernameById(userId) {
+    const userData = this.participantsData.get(userId);
+    return userData ? userData.username : "Unknown User";
+  }
+
+  /**
+   * Get display name by user ID
+   * @param {string} userId Discord user ID
+   * @returns {string} Display name or "Unknown User"
+   */
+  getDisplayNameById(userId) {
+    const userData = this.participantsData.get(userId);
+    return userData ? userData.displayName : "Unknown User";
+  }
+
+  /**
+   * Save meeting metadata to JSON
+   */
+  saveMetadata() {
+    try {
+      if (!this.metadataPath) {
+        logger.error('Cannot save metadata: path not defined');
+        return;
+      }
+      
+      // Convert participants data Map to array for JSON serialization
+      const participants = Array.from(this.participantsData.values());
+      
+      // Create metadata object
+      const metadata = {
+        meetingName: this.currentMeeting,
+        startTime: participants.length > 0 ? Math.min(...participants.map(p => p.joinTime)) : Date.now(),
+        endTime: Date.now(),
+        participants: participants,
+        events: this.eventsTimeline
+      };
+      
+      // Write to file
+      fs.writeFileSync(this.metadataPath, JSON.stringify(metadata, null, 2), 'utf8');
+      logger.info(`Meeting metadata saved to ${this.metadataPath}`);
+    } catch (error) {
+      logger.error('Error saving meeting metadata', error);
+    }
   }
 
   /**
@@ -295,6 +589,9 @@ class AudioRecorder {
         clearInterval(this.mixingInterval);
         this.mixingInterval = null;
       }
+      
+      // Save metadata before stopping
+      this.saveMetadata();
       
       // Traiter les dernières données audio
       if (this.userBuffers && this.recordingProcess && !this.recordingProcess.stdin.destroyed) {
@@ -366,10 +663,11 @@ class AudioRecorder {
       }
       
       const meetingName = this.currentMeeting;
+      const metadataPath = this.metadataPath;
       this.currentMeeting = null;
       
       logger.info(`Stopped recording for meeting: ${meetingName}`);
-      return { meetingName, oggPath: this.oggPath };
+      return { meetingName, oggPath: this.oggPath, metadataPath };
     } catch (error) {
       logger.error('Error stopping recording', error);
       throw error;

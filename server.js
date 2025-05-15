@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const cors = require('cors');
+const setupPlaceholderService = require('./src/utils/placeholder-service');
 
 // Create Express app
 const app = express();
@@ -21,6 +22,9 @@ app.use((req, res, next) => {
   next();
 });
 
+// Set up the placeholder service
+setupPlaceholderService(app);
+
 // API endpoint to get meetings
 app.get('/api/meetings', (req, res) => {
   try {
@@ -31,15 +35,22 @@ app.get('/api/meetings', (req, res) => {
 
     const directories = fs.readdirSync(MEETINGS_DIR)
       .filter(file => {
-        const stat = fs.statSync(path.join(MEETINGS_DIR, file));
-        return stat.isDirectory();
+        const fullPath = path.join(MEETINGS_DIR, file);
+        return fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory();
       });
     
     console.log(`Found ${directories.length} meeting directories`);
     
     const meetings = directories.map(dir => {
       const meetingPath = path.join(MEETINGS_DIR, dir);
-      const files = fs.readdirSync(meetingPath);
+      let files = [];
+      
+      try {
+        files = fs.readdirSync(meetingPath);
+      } catch (err) {
+        console.error(`Error reading directory ${meetingPath}:`, err);
+        return null;
+      }
       
       // List all files for debugging
       console.log(`Files in ${dir}:`, files);
@@ -47,8 +58,13 @@ app.get('/api/meetings', (req, res) => {
       // Get stats for the meeting directory
       const stats = fs.statSync(meetingPath);
       
-      // Look for MP3 file to get duration (simplified)
+      // Look for audio files
       const mp3File = files.find(file => file.endsWith('.mp3'));
+      const oggFile = files.find(file => file.endsWith('.ogg'));
+      const audioFile = mp3File || oggFile;
+      
+      // Check for metadata JSON file
+      const jsonFile = files.find(file => file.endsWith('.json'));
       
       return {
         id: dir,
@@ -57,10 +73,11 @@ app.get('/api/meetings', (req, res) => {
         recorded: files.some(file => file.endsWith('.mp3') || file.endsWith('.ogg')),
         transcribed: files.some(file => file.endsWith('.txt')),
         summarized: files.some(file => file.endsWith('.md')),
-        audioFile: mp3File,
-        audioPath: mp3File ? `/api/audio/${dir}/${mp3File}` : null
+        hasMetadata: files.some(file => file.endsWith('.json')),
+        audioFile: audioFile,
+        metadataFile: jsonFile
       };
-    });
+    }).filter(Boolean); // Remove null entries
     
     res.json(meetings);
   } catch (error) {
@@ -70,29 +87,66 @@ app.get('/api/meetings', (req, res) => {
 });
 
 // Improved audio serving endpoint with proper headers and error handling
-app.get('/api/audio/:meetingName/:fileName', (req, res) => {
+app.get('/meetings/:meetingName/:fileName', (req, res) => {
   try {
     const { meetingName, fileName } = req.params;
+    
+    // Validate inputs to prevent path traversal
+    if (meetingName.includes('..') || fileName.includes('..')) {
+      return res.status(400).json({ error: 'Invalid file path' });
+    }
+    
     const filePath = path.join(MEETINGS_DIR, meetingName, fileName);
     
-    console.log(`Requested audio file: ${filePath}`);
+    console.log(`Requested file: ${filePath}`);
     
     if (!fs.existsSync(filePath)) {
       console.error(`File not found: ${filePath}`);
-      return res.status(404).json({ error: 'Audio file not found' });
+      return res.status(404).json({ error: 'File not found' });
     }
     
     // Get file stats
     const stat = fs.statSync(filePath);
     const fileSize = stat.size;
     
+    // Set appropriate content type based on file extension
+    const ext = path.extname(filePath).toLowerCase();
+    let contentType;
+    
+    switch (ext) {
+      case '.mp3':
+        contentType = 'audio/mpeg';
+        break;
+      case '.ogg':
+        contentType = 'audio/ogg';
+        break;
+      case '.txt':
+        contentType = 'text/plain; charset=utf-8';
+        break;
+      case '.md':
+        contentType = 'text/markdown; charset=utf-8';
+        break;
+      case '.json':
+        contentType = 'application/json; charset=utf-8';
+        break;
+      default:
+        contentType = 'application/octet-stream';
+    }
+    
     // Handle range requests for better streaming
     const range = req.headers.range;
     
-    if (range) {
+    if (range && (ext === '.mp3' || ext === '.ogg')) {
       const parts = range.replace(/bytes=/, '').split('-');
       const start = parseInt(parts[0], 10);
       const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      
+      // Validate range
+      if (isNaN(start) || isNaN(end) || start >= fileSize || end >= fileSize) {
+        res.status(416).send('Range Not Satisfiable');
+        return;
+      }
+      
       const chunkSize = (end - start) + 1;
       const file = fs.createReadStream(filePath, { start, end });
       
@@ -101,7 +155,7 @@ app.get('/api/audio/:meetingName/:fileName', (req, res) => {
         'Content-Range': `bytes ${start}-${end}/${fileSize}`,
         'Accept-Ranges': 'bytes',
         'Content-Length': chunkSize,
-        'Content-Type': 'audio/mpeg',
+        'Content-Type': contentType,
         'Cache-Control': 'public, max-age=3600'
       });
       
@@ -110,7 +164,7 @@ app.get('/api/audio/:meetingName/:fileName', (req, res) => {
       // Set appropriate headers for full file
       res.writeHead(200, {
         'Content-Length': fileSize,
-        'Content-Type': 'audio/mpeg',
+        'Content-Type': contentType,
         'Accept-Ranges': 'bytes',
         'Cache-Control': 'public, max-age=3600'
       });
@@ -118,8 +172,8 @@ app.get('/api/audio/:meetingName/:fileName', (req, res) => {
       fs.createReadStream(filePath).pipe(res);
     }
   } catch (error) {
-    console.error('Error serving audio file:', error);
-    res.status(500).json({ error: 'Failed to serve audio file: ' + error.message });
+    console.error('Error serving file:', error);
+    res.status(500).json({ error: 'Failed to serve file: ' + error.message });
   }
 });
 
@@ -127,6 +181,12 @@ app.get('/api/audio/:meetingName/:fileName', (req, res) => {
 app.get('/api/transcription/:meetingName', (req, res) => {
   try {
     const { meetingName } = req.params;
+    
+    // Validate input
+    if (meetingName.includes('..')) {
+      return res.status(400).json({ error: 'Invalid meeting name' });
+    }
+    
     const filePath = path.join(MEETINGS_DIR, meetingName, `${meetingName}.txt`);
     
     console.log(`Requested transcription: ${filePath}`);
@@ -149,6 +209,12 @@ app.get('/api/transcription/:meetingName', (req, res) => {
 app.get('/api/summary/:meetingName', (req, res) => {
   try {
     const { meetingName } = req.params;
+    
+    // Validate input
+    if (meetingName.includes('..')) {
+      return res.status(400).json({ error: 'Invalid meeting name' });
+    }
+    
     const filePath = path.join(MEETINGS_DIR, meetingName, `${meetingName}.md`);
     
     console.log(`Requested summary: ${filePath}`);
@@ -164,6 +230,34 @@ app.get('/api/summary/:meetingName', (req, res) => {
   } catch (error) {
     console.error('Error retrieving summary:', error);
     res.status(500).json({ error: 'Failed to retrieve summary: ' + error.message });
+  }
+});
+
+// Get meeting metadata
+app.get('/api/metadata/:meetingName', (req, res) => {
+  try {
+    const { meetingName } = req.params;
+    
+    // Validate input
+    if (meetingName.includes('..')) {
+      return res.status(400).json({ error: 'Invalid meeting name' });
+    }
+    
+    const filePath = path.join(MEETINGS_DIR, meetingName, `${meetingName}.json`);
+    
+    console.log(`Requested metadata: ${filePath}`);
+    
+    if (!fs.existsSync(filePath)) {
+      console.log(`Metadata not found: ${filePath}`);
+      return res.status(404).json({ error: 'Metadata not found' });
+    }
+    
+    const metadata = fs.readFileSync(filePath, 'utf-8');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.send(metadata);
+  } catch (error) {
+    console.error('Error retrieving metadata:', error);
+    res.status(500).json({ error: 'Failed to retrieve metadata: ' + error.message });
   }
 });
 

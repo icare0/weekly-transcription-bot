@@ -14,7 +14,7 @@ const state = require('../../utils/state');
 const config = require('config');
 
 const stateLock = new AsyncLock();
-const MEETINGS_DIR = path.join(__dirname, '../../meetings/');
+const MEETINGS_DIR = path.join(__dirname, '../../../meetings/');
 
 module.exports = {
   async execute(interaction) {
@@ -36,7 +36,7 @@ module.exports = {
           
           // Arrêter l'enregistrement
           logger.info('Stopping recording and cleaning up resources...');
-          const { meetingName, oggPath } = await recorder.stopRecording();
+          const { meetingName, oggPath, metadataPath } = await recorder.stopRecording();
           
           if (!meetingName || !oggPath) {
             throw new Error('Recording stopped but meeting name or OGG path is missing');
@@ -61,6 +61,7 @@ module.exports = {
             recorded: true,
             transcribed: false,
             summarized: false,
+            hasMetadata: !!metadataPath && fs.existsSync(metadataPath)
           });
 
           // Informer l'utilisateur que l'enregistrement est arrêté
@@ -165,6 +166,19 @@ module.exports = {
           // 5. Envoyer le résumé dans le thread
           logger.info('Sending summary to thread...');
           await messaging.sendSummary(summary, thread);
+          
+          // 6. Générer les informations de la réunion pour l'interface web
+          if (metadataPath && fs.existsSync(metadataPath)) {
+            const msg5 = await thread.send({ 
+              embeds: [new EmbedBuilder()
+                .setColor(0x3498db)
+                .setTitle(':bar_chart: Participant Data Available')
+                .setDescription('Participant data has been recorded for this meeting. You can view who was speaking in the web interface.')
+                .setTimestamp()
+              ] 
+            });
+          }
+          
           await interaction.editReply({ embeds: [embeds.processingSuccessEmbed] });
           
           logger.info(`Meeting processing completed successfully: ${meetingName}`);

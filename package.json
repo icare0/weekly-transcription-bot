@@ -7,8 +7,8 @@
     "test": "jest",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
-     "web": "node server.js",
-  "dev": "concurrently \"npm start\" \"npm run web\""
+    "web": "node server.js",
+    "dev": "concurrently \"npm start\" \"npm run web\""
   },
   "type": "commonjs",
   "keywords": [
@@ -24,8 +24,9 @@
   "license": "MIT",
   "description": "",
   "dependencies": {
-      "express": "^4.18.2",
-  "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "canvas": "^2.11.2",
     "@discordjs/voice": "^0.18.0",
     "async-lock": "^1.4.1",
     "config": "^3.3.12",
