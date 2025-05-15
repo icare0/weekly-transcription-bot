@@ -5,7 +5,13 @@ const ffmpeg = require('ffmpeg-static');
 const OpenAI = require('openai');
 const config = require('config');
 const state = require('./state');
+const logger = require('./logger');
 
+/**
+ * Obtient la durée d'un fichier audio
+ * @param {string} filePath Chemin du fichier audio
+ * @returns {Promise<number>} Durée en secondes
+ */
 const getAudioDuration = async (filePath) => {
   return new Promise((resolve, reject) => {
     const ffmpegProcess = spawn(ffmpeg, [
@@ -38,6 +44,28 @@ const getAudioDuration = async (filePath) => {
     });
   });
 };
+
+/**
+ * Vérifie la configuration requise au démarrage
+ * @returns {boolean} True si la configuration est valide
+ */
+function checkRequiredConfig() {
+  const requiredEnvVars = ['TOKEN', 'CLIENT_ID', 'GUILD_ID', 'OPENAI_API_KEY'];
+  const missing = [];
+
+  for (const envVar of requiredEnvVars) {
+    if (!process.env[envVar]) {
+      missing.push(envVar);
+    }
+  }
+
+  if (missing.length > 0) {
+    logger.error(`Missing required environment variables: ${missing.join(', ')}`);
+    return false;
+  }
+
+  return true;
+}
 
 module.exports = {
   async cleanupRecording() {
@@ -99,7 +127,7 @@ module.exports = {
       state.connection = null;
     }
   },
-
+  
   convertOggToMp3: async (oggPath, mp3Path) => {
     return new Promise((resolve, reject) => {
       const ffmpegProcess = spawn(ffmpeg, [
@@ -252,4 +280,6 @@ module.exports = {
       await thread.send(messageChunk);
     }
   },
+  
+  checkRequiredConfig
 };

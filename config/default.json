@@ -30,5 +30,11 @@
     "Admin",
     "Przewodniczący sekcji",
     "Weekly Transcription Bot Operator"
-  ]
+  ],
+  
+  "allowed_role_ids": [],
+  
+  "recording": {
+    "max_duration_minutes": 120
+  }
 }
