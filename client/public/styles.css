@@ -1,0 +1,175 @@
+/* Custom styles for the Discord Meeting Player */
+
+/* Light/Dark mode variables */
+:root {
+  --background-primary: #f9fafb;
+  --background-secondary: #ffffff;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --accent-color: #3b82f6;
+  --active-color: #60a5fa;
+  --border-color: #e5e7eb;
+  --card-background: #ffffff;
+  --hover-color: #f3f4f6;
+}
+
+.dark {
+  --background-primary: #111827;
+  --background-secondary: #1f2937;
+  --text-primary: #f9fafb;
+  --text-secondary: #9ca3af;
+  --accent-color: #3b82f6;
+  --active-color: #60a5fa;
+  --border-color: #374151;
+  --card-background: #1f2937;
+  --hover-color: #2d3748;
+}
+
+/* Smooth transitions for theme change */
+body {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Custom player controls */
+.player-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.play-button {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--accent-color);
+  color: white;
+  cursor: pointer;
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.play-button:hover {
+  transform: scale(1.05);
+  background-color: #2563eb; /* Darker blue */
+}
+
+/* Waveform customization */
+.wavesurfer-container {
+  border-radius: 0.5rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.wavesurfer-cursor {
+  width: 2px !important;
+  background-color: var(--accent-color) !important;
+}
+
+/* Timeline markers */
+.timeline-marker {
+  position: absolute;
+  width: 2px;
+  top: 0;
+  bottom: 0;
+  background-color: rgba(239, 68, 68, 0.7);
+  z-index: 2;
+}
+
+.timeline-marker::after {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: rgba(239, 68, 68, 0.7);
+}
+
+/* Participant animation */
+.participant-speaking {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* Active segment highlighting */
+.segment-active {
+  background-color: rgba(59, 130, 246, 0.2);
+  border-left: 3px solid var(--accent-color);
+}
+
+/* Tooltips for timeline events */
+.timeline-tooltip {
+  position: absolute;
+  background-color: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: 0.375rem;
+  padding: 0.5rem;
+  font-size: 0.75rem;
+  z-index: 10;
+  transform: translateX(-50%);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.timeline-event:hover .timeline-tooltip {
+  opacity: 1;
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 640px) {
+  .player-controls {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .participant-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Footer styling */
+footer {
+  margin-top: auto;
+}
+
+/* Animation for events (join/leave) */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.event-notification {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* Scrollbar styling */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: var(--background-secondary);
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-secondary);
+}

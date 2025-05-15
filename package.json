@@ -6,7 +6,9 @@
     "start": "node src/index.js",
     "test": "jest",
     "lint": "eslint . --max-warnings=0",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+     "web": "node server.js",
+  "dev": "concurrently \"npm start\" \"npm run web\""
   },
   "type": "commonjs",
   "keywords": [
@@ -22,6 +24,8 @@
   "license": "MIT",
   "description": "",
   "dependencies": {
+      "express": "^4.18.2",
+  "cors": "^2.8.5",
     "@discordjs/voice": "^0.18.0",
     "async-lock": "^1.4.1",
     "config": "^3.3.12",
@@ -35,6 +39,7 @@
     "@eslint/js": "^9.22.0",
     "eslint": "^9.22.0",
     "globals": "^16.0.0",
-    "jest": "^29.7.0"
+    "jest": "^29.7.0",
+    "concurrently": "^8.2.2"
   }
 }
