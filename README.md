@@ -1,3 +1,6 @@
+The project is migrating to another database; this repository is no longer maintained.
+
+
 # Weekly Transcription Bot
 
 This project is a Discord bot designed to record, transcribe, and summarize weekly meetings held in voice channels. The bot uses the OpenAI API for transcription and summarization.
